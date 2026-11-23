@@ -440,14 +440,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
           <div className="rounded-xl bg-[var(--surface-2)] border border-[var(--border-strong)] p-4">
             <p className="text-[11px] font-bold tracking-wide text-[var(--text-muted)] uppercase">
-              Cartão de Crédito ({draftTotals.selectedInstallment.installments}x)
+              No Cartão de Crédito ({draftTotals.selectedInstallment.installments}x
+              {draftOrder.cardMode === 'sem_juros' ? ' sem juros' : ''})
             </p>
             <p className="font-num text-2xl text-[var(--text-primary)] mt-1">
-              {formatBRL(draftTotals.selectedInstallment.total)}
+              {formatBRL(draftTotals.selectedInstallment.perInstallment)}{' '}
+              <span className="text-sm text-[var(--accent-text)]">
+                em {draftTotals.selectedInstallment.installments}x
+                {draftOrder.cardMode === 'sem_juros' ? ' sem juros' : ''}
+              </span>
             </p>
-            <p className="text-xs text-[var(--accent-text)] mt-0.5 font-num">
-              {draftTotals.selectedInstallment.installments}x de{' '}
-              {formatBRL(draftTotals.selectedInstallment.perInstallment)}
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 font-num">
+              Total no cartão: {formatBRL(draftTotals.selectedInstallment.total)}
             </p>
           </div>
         </div>

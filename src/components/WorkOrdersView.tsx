@@ -230,11 +230,12 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                   <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
                     <div className="text-left sm:text-right tabular-nums">
                       <p className="font-num text-base sm:text-lg font-bold text-[var(--text-primary)]">
-                        {formatBRL(totals.cashTotal)}
+                        {formatBRL(totals.cashTotal)} <span className="text-xs font-medium text-[var(--text-muted)]">à vista</span>
                       </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {totals.selectedInstallment.installments}x{' '}
-                        {formatBRL(totals.selectedInstallment.perInstallment)} no cartão
+                      <p className="text-xs font-num text-[var(--accent-text)]">
+                        {formatBRL(totals.selectedInstallment.perInstallment)} em{' '}
+                        {totals.selectedInstallment.installments}x
+                        {order.cardMode === 'sem_juros' ? ' sem juros' : ''} no cartão
                       </p>
                     </div>
 

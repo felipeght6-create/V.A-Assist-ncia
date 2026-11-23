@@ -614,8 +614,10 @@ export const ScreenCatalogModal: React.FC<ScreenCatalogModalProps> = ({
 
         <div className="px-5 sm:px-6 py-4 bg-[var(--surface-2)] border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs font-num text-[var(--text-primary)]">
-            À Vista: {formatBRL(totals.cashTotal)} · {totals.selectedInstallment.installments}x{' '}
-            {formatBRL(totals.selectedInstallment.perInstallment)}
+            À Vista: {formatBRL(totals.cashTotal)} · No Cartão:{' '}
+            {formatBRL(totals.selectedInstallment.perInstallment)} em{' '}
+            {totals.selectedInstallment.installments}x
+            {draftOrder.cardMode === 'sem_juros' ? ' sem juros' : ''}
           </div>
           <button
             type="button"

@@ -166,7 +166,7 @@ export default function App() {
       freeScreenProtector: false,
       pickupDeliveryFee: 'gratis',
       cashDiscountPercent: store.defaultCashDiscountPercent,
-      cardMode: 'com_taxa',
+      cardMode: 'sem_juros',
       selectedInstallments: 3,
       warrantyDays,
       warrantyStartDate: today,

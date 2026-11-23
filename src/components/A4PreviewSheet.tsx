@@ -72,13 +72,6 @@ export const A4PreviewSheet: React.FC<A4PreviewSheetProps> = ({
   const warrantyEnd =
     order.warrantyEndDate || addDaysYMD(warrantyStart, warrantyDays);
 
-  const maxInstallmentPlan =
-    totals.installmentOptions[totals.installmentOptions.length - 1] ||
-    totals.selectedInstallment;
-  const quickInstallments = [1, 3, 6, 12]
-    .map((n) => totals.installmentOptions.find((o) => o.installments === n))
-    .filter((o): o is NonNullable<typeof o> => Boolean(o));
-
   const extraRowCount =
     (order.freeScreenProtector ? 1 : 0) + 1; // +1 for pickup delivery line
 
@@ -204,17 +197,11 @@ export const A4PreviewSheet: React.FC<A4PreviewSheetProps> = ({
 
               {/* Section 1: Levantamento de Serviços e Peças */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-xs bg-[#0ea5e9] shrink-0" />
-                    <h3 className="font-display text-sm font-bold text-slate-900">
-                      1. Levantamento de Serviços, Telas, Cortesia e Deslocamento
-                    </h3>
-                  </div>
-
-                  <div className="rounded-lg bg-sky-50 border border-sky-300 px-3 py-1 text-xs text-slate-900 font-num">
-                    Total Final: {formatBRL(totals.grossSubtotal)}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#0ea5e9] shrink-0" />
+                  <h3 className="font-display text-sm font-bold text-slate-900">
+                    1. Levantamento de Serviços, Telas, Cortesia e Deslocamento
+                  </h3>
                 </div>
 
                 <div className="rounded-xl overflow-hidden border border-slate-200">
@@ -367,31 +354,32 @@ export const A4PreviewSheet: React.FC<A4PreviewSheetProps> = ({
                     </div>
                   </div>
 
-                  {/* Right White Card: Cartão de Crédito */}
+                  {/* Right White Card: Cartão de Crédito — Parcela em Evidência */}
                   <div className="rounded-2xl bg-white border-2 border-slate-800 text-slate-900 p-4 flex flex-col justify-between">
                     <div>
                       <p className="text-[10.5px] font-bold tracking-wider text-slate-600 uppercase">
-                        CARTÃO DE CRÉDITO (ATÉ {maxInstallmentPlan.installments}x)
+                        NO CARTÃO DE CRÉDITO ({totals.selectedInstallment.installments}x
+                        {order.cardMode === 'sem_juros' ? ' SEM JUROS' : ''})
                       </p>
-                      <p className="font-num text-3xl text-slate-900 mt-1.5">
-                        {formatBRL(totals.selectedInstallment.total)}
-                      </p>
-                      <div className="mt-1.5 inline-block rounded-md bg-sky-100 border border-sky-300 px-2.5 py-0.5 text-xs text-slate-900 font-num">
-                        ou {totals.selectedInstallment.installments}x de{' '}
-                        {formatBRL(totals.selectedInstallment.perInstallment)}
-                        {order.cardMode === 'sem_juros' ? ' sem juros' : ''}
+                      <div className="mt-1.5 flex flex-wrap items-baseline gap-2">
+                        <span className="font-num text-3xl text-slate-900">
+                          {formatBRL(totals.selectedInstallment.perInstallment)}
+                        </span>
+                        <span className="rounded-md bg-sky-100 border border-sky-300 px-2 py-0.5 text-xs text-slate-900 font-num">
+                          em {totals.selectedInstallment.installments}x
+                          {order.cardMode === 'sem_juros' ? ' sem juros' : ''}
+                        </span>
                       </div>
+                      <p className="text-[11px] text-slate-600 font-num mt-1">
+                        Total no cartão: {formatBRL(totals.selectedInstallment.total)}
+                      </p>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-200 text-[10.5px] text-slate-600 space-y-1">
-                      <p>Valor final completo parcelado no cartão de crédito.</p>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] font-num text-slate-800">
-                        {quickInstallments.map((plan) => (
-                          <span key={plan.installments}>
-                            {plan.installments}x {formatBRL(plan.perInstallment)}
-                          </span>
-                        ))}
-                      </div>
+                    <div className="mt-3 pt-2.5 border-t border-slate-200 text-[10.5px] text-slate-600">
+                      <p>
+                        Parcelamento em {totals.selectedInstallment.installments}x
+                        {order.cardMode === 'sem_juros' ? ' sem juros' : ''} no cartão de crédito.
+                      </p>
                     </div>
                   </div>
                 </div>

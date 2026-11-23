@@ -274,7 +274,7 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
       }`,
       '',
       `*À Vista (PIX/Dinheiro): ${formatBRL(totals.cashTotal)}*`,
-      `*Cartão (${totals.selectedInstallment.installments}x): ${totals.selectedInstallment.installments}x de ${formatBRL(totals.selectedInstallment.perInstallment)} (Total ${formatBRL(totals.selectedInstallment.total)})*`,
+      `*No Cartão: ${formatBRL(totals.selectedInstallment.perInstallment)} em ${totals.selectedInstallment.installments}x${draftOrder.cardMode === 'sem_juros' ? ' sem juros' : ''}* (Total ${formatBRL(totals.selectedInstallment.total)})`,
       '',
       `*Garantia de ${warrantyDays} dias* (Instalação: ${formatDateBR(warrantyStart)} · Término: ${formatDateBR(warrantyEnd)})`,
       'Cobre defeitos de fabricação e falhas da peça instalada. Não cobre tela quebrada/trincada após entrega, quedas, umidade, mau uso ou outros componentes (CDC Lei 8.078/90).',
@@ -966,38 +966,11 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
             </div>
           </section>
 
-          {/* 3. Payment Calculation: À Vista vs Cartão */}
+          {/* 3. Payment Calculation: Apenas 2 Valores — À Vista e No Cartão */}
           <section className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 space-y-4">
             <h2 className="font-display text-base font-bold text-[var(--text-primary)]">
-              3. Cálculo: À Vista e Cartão de Crédito
+              3. Valores Finais: À Vista e No Cartão
             </h2>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-center tabular-nums">
-              <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Peças / Telas</p>
-                <p className="font-num text-sm font-bold text-[var(--text-primary)]">
-                  {formatBRL(totals.partsSubtotal)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Mão de Obra</p>
-                <p className="font-num text-sm font-bold text-[var(--text-primary)]">
-                  {formatBRL(totals.laborSubtotal)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Deslocamento</p>
-                <p className="font-num text-sm font-bold text-[var(--text-primary)]">
-                  {totals.pickupFee > 0 ? formatBRL(totals.pickupFee) : 'GRÁTIS'}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Total Final</p>
-                <p className="font-num text-sm font-bold text-[var(--accent-text)]">
-                  {formatBRL(totals.grossSubtotal)}
-                </p>
-              </div>
-            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* À Vista Settings */}
@@ -1030,7 +1003,7 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                 </div>
                 <div className="pt-1 tabular-nums">
                   <p className="text-xs text-[var(--text-secondary)]">Valor Final À Vista:</p>
-                  <p className="font-num text-xl font-bold text-[var(--text-primary)]">
+                  <p className="font-num text-2xl font-bold text-[var(--text-primary)]">
                     {formatBRL(totals.cashTotal)}
                   </p>
                 </div>
@@ -1040,23 +1013,10 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-3">
                 <div className="flex items-center gap-2 text-[var(--text-primary)] font-semibold text-sm">
                   <CreditCard className="w-4 h-4 text-[var(--accent-text)]" />
-                  <span>Cartão de Crédito</span>
+                  <span>No Cartão de Crédito</span>
                 </div>
 
                 <div className="flex items-center gap-1 p-1 bg-[var(--surface)] border border-[var(--border)] rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onChangeDraft({ ...draftOrder, cardMode: 'com_taxa' as CardMode })
-                    }
-                    className={`flex-1 min-h-[34px] rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                      draftOrder.cardMode === 'com_taxa'
-                        ? 'bg-[var(--accent)] text-[var(--accent-on)] shadow-xs'
-                        : 'text-[var(--text-secondary)]'
-                    }`}
-                  >
-                    Com Taxa
-                  </button>
                   <button
                     type="button"
                     onClick={() =>
@@ -1070,11 +1030,24 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                   >
                     Sem Juros
                   </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeDraft({ ...draftOrder, cardMode: 'com_taxa' as CardMode })
+                    }
+                    className={`flex-1 min-h-[34px] rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      draftOrder.cardMode === 'com_taxa'
+                        ? 'bg-[var(--accent)] text-[var(--accent-on)] shadow-xs'
+                        : 'text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    Com Taxa
+                  </button>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
-                    Parcela em Destaque no PDF
+                    Parcelamento no Cartão
                   </label>
                   <select
                     value={draftOrder.selectedInstallments}
@@ -1088,7 +1061,8 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                   >
                     {totals.installmentOptions.map((opt) => (
                       <option key={opt.installments} value={opt.installments}>
-                        {opt.installments}x de {formatBRL(opt.perInstallment)} (Total{' '}
+                        {formatBRL(opt.perInstallment)} em {opt.installments}x
+                        {draftOrder.cardMode === 'sem_juros' ? ' sem juros' : ''} (Total{' '}
                         {formatBRL(opt.total)})
                       </option>
                     ))}
@@ -1097,11 +1071,17 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
 
                 <div className="pt-1 tabular-nums">
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Total em {totals.selectedInstallment.installments}x:
+                    Valor em Evidência no Cartão:
                   </p>
-                  <p className="font-num text-lg font-bold text-[var(--text-primary)]">
-                    {totals.selectedInstallment.installments}x{' '}
-                    {formatBRL(totals.selectedInstallment.perInstallment)}
+                  <p className="font-num text-2xl font-bold text-[var(--text-primary)]">
+                    {formatBRL(totals.selectedInstallment.perInstallment)}{' '}
+                    <span className="text-sm text-[var(--accent-text)]">
+                      em {totals.selectedInstallment.installments}x
+                      {draftOrder.cardMode === 'sem_juros' ? ' sem juros' : ''}
+                    </span>
+                  </p>
+                  <p className="text-[11px] font-num text-[var(--text-muted)]">
+                    Total no cartão: {formatBRL(totals.selectedInstallment.total)}
                   </p>
                 </div>
               </div>

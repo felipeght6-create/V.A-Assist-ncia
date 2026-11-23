@@ -199,15 +199,6 @@ export async function generateBudgetPDF(
   doc.setTextColor(15, 23, 42);
   doc.text('1. Levantamento de Serviços, Telas, Cortesia e Deslocamento', margin + 4.5, y);
 
-  // Total badge right
-  const badgeText = `Total Final: ${formatBRL(totals.grossSubtotal)}`;
-  doc.setFillColor(240, 249, 255);
-  doc.setDrawColor(125, 211, 252);
-  doc.roundedRect(pageWidth - margin - 44, y - 4.3, 44, 6.2, 1.5, 1.5, 'FD');
-  doc.setFontSize(8);
-  doc.setTextColor(15, 23, 42);
-  doc.text(badgeText, pageWidth - margin - 22, y - 0.3, { align: 'center' });
-
   y += 4;
 
   // Table Header (#0f172a)
@@ -371,11 +362,9 @@ export async function generateBudgetPDF(
     doc.text(`Chave PIX: ${store.pixKey}`, margin + 5, y + 35);
   }
 
-  // Right White Card (Cartão de Crédito)
+  // Right White Card (Cartão de Crédito — Parcela em Evidência)
   const cardX = margin + payW + payGap;
-  const maxPlan =
-    totals.installmentOptions[totals.installmentOptions.length - 1] ||
-    totals.selectedInstallment;
+  const semJurosLabel = order.cardMode === 'sem_juros' ? ' sem juros' : '';
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(30, 41, 59);
@@ -386,40 +375,48 @@ export async function generateBudgetPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
-  doc.text(`CARTÃO DE CRÉDITO (ATÉ ${maxPlan.installments}x)`, cardX + 5, y + 6.8);
+  doc.text(
+    `NO CARTÃO DE CRÉDITO (${totals.selectedInstallment.installments}x${order.cardMode === 'sem_juros' ? ' SEM JUROS' : ''})`,
+    cardX + 5,
+    y + 6.8
+  );
 
   doc.setFontSize(18);
   doc.setTextColor(15, 23, 42);
-  doc.text(formatBRL(totals.selectedInstallment.total), cardX + 5, y + 16);
+  const perInstStr = formatBRL(totals.selectedInstallment.perInstallment);
+  doc.text(perInstStr, cardX + 5, y + 16);
 
-  // Highlighted installment badge
-  const instBadge = `ou ${totals.selectedInstallment.installments}x de ${formatBRL(totals.selectedInstallment.perInstallment)}`;
+  // Highlighted installment condition badge beside/right of value
+  const instBadge = `em ${totals.selectedInstallment.installments}x${semJurosLabel}`;
+  const perInstW = doc.getTextWidth(perInstStr);
   doc.setFillColor(224, 242, 254);
   doc.setDrawColor(125, 211, 252);
-  doc.roundedRect(cardX + 5, y + 18.2, 56, 5.4, 1, 1, 'FD');
+  doc.roundedRect(cardX + 7 + perInstW, y + 10.8, 36, 5.8, 1, 1, 'FD');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.6);
   doc.setTextColor(15, 23, 42);
-  doc.text(instBadge, cardX + 7.5, y + 22);
+  doc.text(instBadge, cardX + 9 + perInstW, y + 14.8);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    `Total no cartão: ${formatBRL(totals.selectedInstallment.total)}`,
+    cardX + 5,
+    y + 21.5
+  );
 
   doc.setDrawColor(226, 232, 240);
-  doc.line(cardX + 5, y + 26, cardX + payW - 5, y + 26);
+  doc.line(cardX + 5, y + 24.5, cardX + payW - 5, y + 24.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.3);
+  doc.setFontSize(7.4);
   doc.setTextColor(71, 85, 105);
-  doc.text('Valor final completo parcelado no cartão de crédito.', cardX + 5, y + 30.8);
-
-  const summaryPlans = [1, 3, 6, 12]
-    .map((n) => totals.installmentOptions.find((o) => o.installments === n))
-    .filter((o): o is NonNullable<typeof o> => Boolean(o));
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.2);
-  doc.setTextColor(15, 23, 42);
-  const planLine = summaryPlans
-    .map((p) => `${p.installments}x ${formatBRL(p.perInstallment)}`)
-    .join('  ·  ');
-  doc.text(planLine, cardX + 5, y + 36);
+  doc.text(
+    `Parcelamento em ${totals.selectedInstallment.installments}x${semJurosLabel} no cartão de crédito.`,
+    cardX + 5,
+    y + 30.8
+  );
 
   y += payH + 6;
 
