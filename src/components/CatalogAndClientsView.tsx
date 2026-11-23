@@ -477,68 +477,94 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredClients.map((client) => (
-              <div
-                key={client.id}
-                className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col justify-between gap-4"
-              >
-                <div className="space-y-1.5">
-                  <h3 className="font-display text-base font-bold text-[var(--text-primary)]">
-                    {client.name}
-                  </h3>
-                  <div className="text-xs text-[var(--text-secondary)] space-y-0.5">
-                    <p>
-                      <span className="text-[var(--text-muted)]">WhatsApp/Tel:</span>{' '}
-                      <span className="font-medium text-[var(--text-primary)]">{client.phone || '-'}</span>
-                    </p>
-                    <p>
-                      <span className="text-[var(--text-muted)]">CPF/CNPJ:</span>{' '}
-                      <span className="font-num text-[var(--text-primary)]">{client.cpfCnpj || '-'}</span>
-                    </p>
-                    {client.address && (
+          {filteredClients.length === 0 ? (
+            <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-10 text-center space-y-3">
+              <Users className="w-10 h-10 text-[var(--accent-text)] mx-auto" />
+              <h3 className="font-display text-base font-bold text-[var(--text-primary)]">
+                {clients.length === 0
+                  ? 'Nenhum cliente cadastrado ainda'
+                  : 'Nenhum cliente encontrado para essa busca'}
+              </h3>
+              <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
+                {clients.length === 0
+                  ? 'Cadastre seus clientes para agilizar orçamentos A4, agendamentos e ordens de serviço.'
+                  : 'Tente buscar por outro nome, telefone ou CPF/CNPJ.'}
+              </p>
+              {clients.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() => openClientModal()}
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-sm font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Cadastrar Primeiro Cliente</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredClients.map((client) => (
+                <div
+                  key={client.id}
+                  className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col justify-between gap-4"
+                >
+                  <div className="space-y-1.5">
+                    <h3 className="font-display text-base font-bold text-[var(--text-primary)]">
+                      {client.name}
+                    </h3>
+                    <div className="text-xs text-[var(--text-secondary)] space-y-0.5">
                       <p>
-                        <span className="text-[var(--text-muted)]">Endereço:</span> {client.address}
+                        <span className="text-[var(--text-muted)]">WhatsApp/Tel:</span>{' '}
+                        <span className="font-medium text-[var(--text-primary)]">{client.phone || '-'}</span>
                       </p>
-                    )}
-                    {client.notes && (
-                      <p className="text-[var(--text-muted)] pt-1">{client.notes}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => openClientModal(client)}
-                      className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent-text)] inline-flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>Editar</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteClient(client.id)}
-                      aria-label="Excluir cliente"
-                      className="min-h-[40px] min-w-[40px] rounded-xl text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <p>
+                        <span className="text-[var(--text-muted)]">CPF/CNPJ:</span>{' '}
+                        <span className="font-num text-[var(--text-primary)]">{client.cpfCnpj || '-'}</span>
+                      </p>
+                      {client.address && (
+                        <p>
+                          <span className="text-[var(--text-muted)]">Endereço:</span> {client.address}
+                        </p>
+                      )}
+                      {client.notes && (
+                        <p className="text-[var(--text-muted)] pt-1">{client.notes}</p>
+                      )}
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => onStartBudgetForClient(client.id)}
-                    className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-xs font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>Novo Orçamento</span>
-                  </button>
+                  <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openClientModal(client)}
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent-text)] inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Editar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteClient(client.id)}
+                        aria-label="Excluir cliente"
+                        className="min-h-[40px] min-w-[40px] rounded-xl text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onStartBudgetForClient(client.id)}
+                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-xs font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Novo Orçamento</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

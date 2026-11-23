@@ -188,38 +188,7 @@ export const INITIAL_SERVICES: ServiceItem[] = [
   },
 ];
 
-export const INITIAL_CLIENTS: Client[] = [
-  {
-    id: 'cli_1',
-    name: 'Mariana Oliveira',
-    phone: '(11) 98421-3340',
-    email: 'mariana.oliveira@email.com',
-    cpfCnpj: '384.210.998-12',
-    address: 'Rua das Acácias, 128 — Jardim Paulista',
-    notes: 'Prefere contato via WhatsApp no período da tarde.',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cli_2',
-    name: 'Carlos Eduardo Santos',
-    phone: '(11) 97112-8854',
-    email: 'carlos.santos@empresa.com.br',
-    cpfCnpj: '219.440.112-05',
-    address: 'Av. Brasil, 900 — Sala 14',
-    notes: 'Cliente corporativo (notebooks da equipe).',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cli_3',
-    name: 'Fernanda Costa Lima',
-    phone: '(11) 99305-4419',
-    email: 'fernanda.lima@email.com',
-    cpfCnpj: '412.887.330-90',
-    address: 'Rua 7 de Setembro, 54',
-    notes: '',
-    createdAt: new Date().toISOString(),
-  },
-];
+export const INITIAL_CLIENTS: Client[] = [];
 
 const today = getTodayYMD();
 const tomorrow = addDaysYMD(today, 1);

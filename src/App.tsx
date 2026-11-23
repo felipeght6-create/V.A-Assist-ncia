@@ -70,6 +70,24 @@ function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
+const SEED_CLIENTS_CLEARED_KEY = 'va_assistencia_seed_clients_cleared_v1';
+const SEED_DEMO_CLIENT_IDS = new Set(['cli_1', 'cli_2', 'cli_3']);
+
+function loadInitialClients(): Client[] {
+  const loaded = loadFromStorage(STORAGE_KEYS.clients, INITIAL_CLIENTS);
+  try {
+    if (!localStorage.getItem(SEED_CLIENTS_CLEARED_KEY)) {
+      const cleaned = loaded.filter((c) => !SEED_DEMO_CLIENT_IDS.has(c.id));
+      localStorage.setItem(SEED_CLIENTS_CLEARED_KEY, '1');
+      saveToStorage(STORAGE_KEYS.clients, cleaned);
+      return cleaned;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return loaded;
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('inicio');
   const [theme, setTheme] = useState<ThemeId>(() =>
@@ -91,9 +109,7 @@ export default function App() {
   const [services, setServices] = useState<ServiceItem[]>(() =>
     loadFromStorage(STORAGE_KEYS.services, INITIAL_SERVICES)
   );
-  const [clients, setClients] = useState<Client[]>(() =>
-    loadFromStorage(STORAGE_KEYS.clients, INITIAL_CLIENTS)
-  );
+  const [clients, setClients] = useState<Client[]>(loadInitialClients);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
     loadFromStorage(STORAGE_KEYS.orders, INITIAL_WORK_ORDERS)
   );
@@ -149,24 +165,25 @@ export default function App() {
     };
   };
 
-  const [draftOrder, setDraftOrder] = useState<WorkOrder>(() =>
-    loadFromStorage<WorkOrder | null>(STORAGE_KEYS.draft, null) ??
-    (INITIAL_WORK_ORDERS[0]
-      ? { ...INITIAL_WORK_ORDERS[0] }
-      : createBlankOrder())
-  );
+  const [draftOrder, setDraftOrder] = useState<WorkOrder>(() => {
+    const storedDraft = loadFromStorage<WorkOrder | null>(STORAGE_KEYS.draft, null);
+    if (storedDraft) return storedDraft;
+    return createBlankOrder();
+  });
 
   // Keep draftOrder.clientId valid whenever clients list changes
   useEffect(() => {
-    if (clients.length === 0) return;
     const valid = clients.some((c) => c.id === draftOrder.clientId);
     if (!valid) {
-      setDraftOrder((prev) => {
-        if (clients.some((c) => c.id === prev.clientId)) return prev;
-        const next = { ...prev, clientId: clients[0].id };
-        saveToStorage(STORAGE_KEYS.draft, next);
-        return next;
-      });
+      const fallbackId = clients[0]?.id ?? '';
+      if (draftOrder.clientId !== fallbackId) {
+        setDraftOrder((prev) => {
+          if (clients.some((c) => c.id === prev.clientId)) return prev;
+          const next = { ...prev, clientId: clients[0]?.id ?? '' };
+          saveToStorage(STORAGE_KEYS.draft, next);
+          return next;
+        });
+      }
     }
   }, [clients, draftOrder.clientId]);
 
