@@ -1,0 +1,6 @@
+{
+  "name": "V.A Assistência — Gestão, OS e Orçamentos A4",
+  "description": "Sistema completo para assistência técnica de celulares, notebooks, computadores e venda de acessórios com agendamentos, ordens de serviço e orçamento em PDF A4.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

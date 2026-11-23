@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Default Theme: Cinza Escuro Degradê */
+:root,
+:root[data-theme="charcoal"] {
+  color-scheme: dark;
+  --app-bg: linear-gradient(145deg, #0b0e14 0%, #151b26 48%, #202836 100%);
+  --surface: #171d28;
+  --surface-2: #1f2735;
+  --surface-hover: #273142;
+  --hero-bg: linear-gradient(135deg, #1d2534 0%, #131822 100%);
+  --border: #2b3547;
+  --border-strong: #3b475e;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --accent: #0ea5e9;
+  --accent-hover: #0284c7;
+  --accent-soft: rgba(14, 165, 233, 0.15);
+  --accent-text: #38bdf8;
+  --accent-on: #ffffff;
+  --btn-secondary-bg: #263042;
+  --btn-secondary-text: #f8fafc;
+  --input-bg: #10151f;
+  --nav-bg: rgba(19, 24, 34, 0.92);
+}
+
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+  --app-bg: linear-gradient(145deg, #060d1b 0%, #0b1830 50%, #132548 100%);
+  --surface: #0f1d36;
+  --surface-2: #162849;
+  --surface-hover: #1d335c;
+  --hero-bg: linear-gradient(135deg, #15294f 0%, #0b162b 100%);
+  --border: #213863;
+  --border-strong: #2e4b82;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --accent: #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-soft: rgba(56, 189, 248, 0.15);
+  --accent-text: #7dd3fc;
+  --accent-on: #061326;
+  --btn-secondary-bg: #1c3259;
+  --btn-secondary-text: #f8fafc;
+  --input-bg: #081224;
+  --nav-bg: rgba(10, 20, 40, 0.92);
+}
+
+:root[data-theme="graphite-gold"] {
+  color-scheme: dark;
+  --app-bg: linear-gradient(145deg, #0d0d10 0%, #18181e 52%, #24242c 100%);
+  --surface: #18181d;
+  --surface-2: #222229;
+  --surface-hover: #2c2c35;
+  --hero-bg: linear-gradient(135deg, #22222a 0%, #141418 100%);
+  --border: #2f2f39;
+  --border-strong: #41414f;
+  --text-primary: #fafaf9;
+  --text-secondary: #d4d4d8;
+  --text-muted: #a1a1aa;
+  --accent: #e5a93c;
+  --accent-hover: #d49424;
+  --accent-soft: rgba(229, 169, 60, 0.14);
+  --accent-text: #f3c162;
+  --accent-on: #14120c;
+  --btn-secondary-bg: #2b2b34;
+  --btn-secondary-text: #fafaf9;
+  --input-bg: #111115;
+  --nav-bg: rgba(18, 18, 23, 0.94);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app-bg: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-hover: #e2e8f0;
+  --hero-bg: linear-gradient(135deg, #ffffff 0%, #eff8ff 100%);
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --accent: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-soft: rgba(2, 132, 199, 0.10);
+  --accent-text: #0369a1;
+  --accent-on: #ffffff;
+  --btn-secondary-bg: #0f172a;
+  --btn-secondary-text: #ffffff;
+  --input-bg: #f8fafc;
+  --nav-bg: rgba(255, 255, 255, 0.95);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background: var(--app-bg);
+    background-attachment: fixed;
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.font-num {
+  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A4 Print Rules */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html, body {
+    width: 210mm;
+    height: 297mm;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only-sheet {
+    position: static !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    padding: 14mm 15mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: none !important;
+  }
+}
