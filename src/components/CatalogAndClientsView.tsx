@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building2,
   Check,
@@ -21,10 +21,14 @@ import {
 import { CATEGORY_LABELS, formatBRL, generateId } from '../utils/format';
 import { PWAAppInstallCard } from './PWAInstallBanner';
 
+type SubTab = 'clientes' | 'servicos' | 'empresa';
+
 interface CatalogAndClientsViewProps {
   clients: Client[];
   services: ServiceItem[];
   store: StoreProfile;
+  initialSubTab?: SubTab | null;
+  onClearInitialSubTab?: () => void;
   onSaveClient: (client: Client) => void;
   onDeleteClient: (id: string) => void;
   onSaveService: (service: ServiceItem) => void;
@@ -37,12 +41,14 @@ interface CatalogAndClientsViewProps {
   backupMessage?: string | null;
 }
 
-type SubTab = 'clientes' | 'servicos' | 'empresa';
+const SUBTAB_STORAGE_KEY = 'va_assistencia_catalog_subtab_v1';
 
 export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   clients,
   services,
   store,
+  initialSubTab,
+  onClearInitialSubTab,
   onSaveClient,
   onDeleteClient,
   onSaveService,
@@ -54,9 +60,36 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   onImportBackup,
   backupMessage,
 }) => {
-  const [subTab, setSubTab] = useState<SubTab>('servicos');
+  const [subTab, setSubTab] = useState<SubTab>(() => {
+    if (initialSubTab) return initialSubTab;
+    try {
+      const saved = sessionStorage.getItem(SUBTAB_STORAGE_KEY);
+      if (saved === 'clientes' || saved === 'servicos' || saved === 'empresa') {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'servicos';
+  });
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<'todos' | ServiceCategoryId>('todos');
+  const [clientSavedBanner, setClientSavedBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setSubTab(initialSubTab);
+      onClearInitialSubTab?.();
+    }
+  }, [initialSubTab, onClearInitialSubTab]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SUBTAB_STORAGE_KEY, subTab);
+    } catch {
+      // ignore
+    }
+  }, [subTab]);
 
   const [clientModalOpen, setClientModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -125,7 +158,8 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
 
   const handleSaveClientForm = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveClient({
+    if (!cName.trim()) return;
+    const saved: Client = {
       id: editingClient ? editingClient.id : generateId('cli'),
       name: cName.trim(),
       phone: cPhone.trim(),
@@ -134,8 +168,12 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
       address: cAddress.trim(),
       notes: cNotes.trim(),
       createdAt: editingClient ? editingClient.createdAt : new Date().toISOString(),
-    });
+    };
+    onSaveClient(saved);
+    setSearch('');
     setClientModalOpen(false);
+    setClientSavedBanner(`Cliente "${saved.name}" salvo no cadastro!`);
+    setTimeout(() => setClientSavedBanner(null), 3500);
   };
 
   const openServiceModal = (srv?: ServiceItem) => {
@@ -412,6 +450,12 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
       {/* TAB 2: CLIENTES */}
       {subTab === 'clientes' && (
         <div className="space-y-4">
+          {clientSavedBanner && (
+            <div className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-xs sm:text-sm font-semibold text-emerald-400 flex items-center gap-2">
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{clientSavedBanner}</span>
+            </div>
+          )}
           <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -806,11 +850,10 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                    WhatsApp / Telefone *
+                    WhatsApp / Telefone
                   </label>
                   <input
                     type="text"
-                    required
                     value={cPhone}
                     onChange={(e) => setCPhone(e.target.value)}
                     placeholder="(11) 99999-9999"

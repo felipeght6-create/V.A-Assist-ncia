@@ -122,7 +122,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
     e.preventDefault();
     const record: Appointment = {
       id: editingApt ? editingApt.id : generateId('apt'),
-      clientId: clientId || clients[0]?.id || '',
+      clientId: (clientMap.has(clientId) ? clientId : clients[0]?.id) || '',
       deviceBrandModel: deviceBrandModel.trim() || 'Aparelho não informado',
       category,
       serviceSummary: serviceSummary.trim() || CATEGORY_LABELS[category],
@@ -340,7 +340,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                   Cliente
                 </label>
                 <select
-                  value={clientId}
+                  value={clientMap.has(clientId) ? clientId : (clients[0]?.id ?? '')}
                   onChange={(e) => setClientId(e.target.value)}
                   className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                 >

@@ -221,7 +221,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               Cálculo Automático do Orçamento ({draftOrder.code})
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
-              Adicione quantos serviços desejar — o cálculo à vista e parcelado atualiza automaticamente
+              Cliente: <strong className="text-[var(--text-primary)]">{clientMap.get(draftOrder.clientId)?.name || clients[0]?.name || 'Não selecionado'}</strong> · O cálculo à vista e parcelado atualiza automaticamente
             </p>
           </div>
           <div className="flex items-center gap-4">

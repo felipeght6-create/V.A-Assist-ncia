@@ -48,6 +48,7 @@ const STORAGE_KEYS = {
   clients: 'va_assistencia_clients_v1',
   orders: 'va_assistencia_orders_v1',
   appointments: 'va_assistencia_appointments_v1',
+  draft: 'va_assistencia_draft_v1',
   theme: 'va_assistencia_theme_v1',
 };
 
@@ -58,6 +59,14 @@ function loadFromStorage<T>(key: string, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+function saveToStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore storage quota errors
   }
 }
 
@@ -94,6 +103,8 @@ export default function App() {
 
   const [schedulePresetCategory, setSchedulePresetCategory] =
     useState<ServiceCategoryId | null>(null);
+  const [catalogInitialSubTab, setCatalogInitialSubTab] =
+    useState<'servicos' | 'clientes' | 'empresa' | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -139,30 +150,49 @@ export default function App() {
   };
 
   const [draftOrder, setDraftOrder] = useState<WorkOrder>(() =>
-    INITIAL_WORK_ORDERS[0]
+    loadFromStorage<WorkOrder | null>(STORAGE_KEYS.draft, null) ??
+    (INITIAL_WORK_ORDERS[0]
       ? { ...INITIAL_WORK_ORDERS[0] }
-      : createBlankOrder()
+      : createBlankOrder())
   );
 
+  // Keep draftOrder.clientId valid whenever clients list changes
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.store, JSON.stringify(store));
+    if (clients.length === 0) return;
+    const valid = clients.some((c) => c.id === draftOrder.clientId);
+    if (!valid) {
+      setDraftOrder((prev) => {
+        if (clients.some((c) => c.id === prev.clientId)) return prev;
+        const next = { ...prev, clientId: clients[0].id };
+        saveToStorage(STORAGE_KEYS.draft, next);
+        return next;
+      });
+    }
+  }, [clients, draftOrder.clientId]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.store, store);
   }, [store]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.services, JSON.stringify(services));
+    saveToStorage(STORAGE_KEYS.services, services);
   }, [services]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.clients, JSON.stringify(clients));
+    saveToStorage(STORAGE_KEYS.clients, clients);
   }, [clients]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(workOrders));
+    saveToStorage(STORAGE_KEYS.orders, workOrders);
   }, [workOrders]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.appointments, JSON.stringify(appointments));
+    saveToStorage(STORAGE_KEYS.appointments, appointments);
   }, [appointments]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.draft, draftOrder);
+  }, [draftOrder]);
 
   const isExistingDraft = workOrders.some((o) => o.id === draftOrder.id);
 
@@ -238,53 +268,69 @@ export default function App() {
   const handleSaveAsWorkOrder = (order: WorkOrder) => {
     setWorkOrders((prev) => {
       const exists = prev.some((o) => o.id === order.id);
-      if (exists) {
-        return prev.map((o) => (o.id === order.id ? order : o));
-      }
-      return [order, ...prev];
+      const next = exists
+        ? prev.map((o) => (o.id === order.id ? order : o))
+        : [order, ...prev];
+      saveToStorage(STORAGE_KEYS.orders, next);
+      return next;
     });
   };
 
   const handleUpdateOrderStatus = (orderId: string, status: WorkOrderStatus) => {
-    setWorkOrders((prev) =>
-      prev.map((o) =>
+    setWorkOrders((prev) => {
+      const next = prev.map((o) =>
         o.id === orderId ? { ...o, status, updatedAt: new Date().toISOString() } : o
-      )
-    );
+      );
+      saveToStorage(STORAGE_KEYS.orders, next);
+      return next;
+    });
   };
 
   const handleUpdateOrderNotes = (orderId: string, technicianNotes: string) => {
-    setWorkOrders((prev) =>
-      prev.map((o) =>
+    setWorkOrders((prev) => {
+      const next = prev.map((o) =>
         o.id === orderId
           ? { ...o, technicianNotes, updatedAt: new Date().toISOString() }
           : o
-      )
-    );
+      );
+      saveToStorage(STORAGE_KEYS.orders, next);
+      return next;
+    });
   };
 
   const handleDeleteOrder = (orderId: string) => {
-    setWorkOrders((prev) => prev.filter((o) => o.id !== orderId));
+    setWorkOrders((prev) => {
+      const next = prev.filter((o) => o.id !== orderId);
+      saveToStorage(STORAGE_KEYS.orders, next);
+      return next;
+    });
   };
 
   const handleSaveAppointment = (apt: Appointment) => {
     setAppointments((prev) => {
       const exists = prev.some((a) => a.id === apt.id);
-      if (exists) {
-        return prev.map((a) => (a.id === apt.id ? apt : a));
-      }
-      return [apt, ...prev];
+      const next = exists
+        ? prev.map((a) => (a.id === apt.id ? apt : a))
+        : [apt, ...prev];
+      saveToStorage(STORAGE_KEYS.appointments, next);
+      return next;
     });
   };
 
   const handleUpdateAppointmentStatus = (id: string, status: AppointmentStatus) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status } : a))
-    );
+    setAppointments((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, status } : a));
+      saveToStorage(STORAGE_KEYS.appointments, next);
+      return next;
+    });
   };
 
   const handleDeleteAppointment = (id: string) => {
-    setAppointments((prev) => prev.filter((a) => a.id !== id));
+    setAppointments((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      saveToStorage(STORAGE_KEYS.appointments, next);
+      return next;
+    });
   };
 
   const handleConvertAppointmentToBudget = (apt: Appointment) => {
@@ -310,35 +356,46 @@ export default function App() {
         : [],
     });
     setDraftOrder(newOrder);
+    saveToStorage(STORAGE_KEYS.draft, newOrder);
     setActiveTab('orcamento');
   };
 
   const handleSaveClient = (client: Client) => {
     setClients((prev) => {
       const exists = prev.some((c) => c.id === client.id);
-      if (exists) {
-        return prev.map((c) => (c.id === client.id ? client : c));
-      }
-      return [client, ...prev];
+      const next = exists
+        ? prev.map((c) => (c.id === client.id ? client : c))
+        : [client, ...prev];
+      saveToStorage(STORAGE_KEYS.clients, next);
+      return next;
     });
   };
 
   const handleDeleteClient = (id: string) => {
-    setClients((prev) => prev.filter((c) => c.id !== id));
+    setClients((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      saveToStorage(STORAGE_KEYS.clients, next);
+      return next;
+    });
   };
 
   const handleSaveService = (srv: ServiceItem) => {
     setServices((prev) => {
       const exists = prev.some((s) => s.id === srv.id);
-      if (exists) {
-        return prev.map((s) => (s.id === srv.id ? srv : s));
-      }
-      return [srv, ...prev];
+      const next = exists
+        ? prev.map((s) => (s.id === srv.id ? srv : s))
+        : [srv, ...prev];
+      saveToStorage(STORAGE_KEYS.services, next);
+      return next;
     });
   };
 
   const handleDeleteService = (id: string) => {
-    setServices((prev) => prev.filter((s) => s.id !== id));
+    setServices((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveToStorage(STORAGE_KEYS.services, next);
+      return next;
+    });
   };
 
   const handleExportBackup = () => {
@@ -532,6 +589,10 @@ export default function App() {
               onChangeDraft={setDraftOrder}
               onSaveAsWorkOrder={handleSaveAsWorkOrder}
               onQuickCreateClient={handleSaveClient}
+              onOpenClientsTab={() => {
+                setCatalogInitialSubTab('clientes');
+                setActiveTab('cadastros');
+              }}
             />
           )}
 
@@ -540,6 +601,8 @@ export default function App() {
               clients={clients}
               services={services}
               store={store}
+              initialSubTab={catalogInitialSubTab}
+              onClearInitialSubTab={() => setCatalogInitialSubTab(null)}
               onSaveClient={handleSaveClient}
               onDeleteClient={handleDeleteClient}
               onSaveService={handleSaveService}
