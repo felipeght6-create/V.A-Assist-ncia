@@ -2,17 +2,21 @@ import React, { useMemo, useState } from 'react';
 import {
   ChevronRight,
   ClipboardList,
+  FilePlus2,
   FileText,
+  FolderCog,
   Laptop,
+  MonitorSmartphone,
   Plus,
   ShieldCheck,
-  Smartphone,
   Trash2,
+  Users,
   Wrench,
   X,
 } from 'lucide-react';
 import {
   Client,
+  ScreenCatalogItem,
   ServiceCategoryId,
   ServiceItem,
   StoreProfile,
@@ -20,23 +24,31 @@ import {
 } from '../types';
 import {
   CATEGORY_LABELS,
+  FREE_PROTECTOR_DESCRIPTION,
   STATUS_LABELS,
   calculateBudgetTotals,
   formatBRL,
   formatDateBR,
+  getPickupFeeAmount,
 } from '../utils/format';
+import { ScreenCatalogModal } from './ScreenCatalogModal';
 
 interface HomeDashboardProps {
   store: StoreProfile;
   services: ServiceItem[];
+  screenCatalog: ScreenCatalogItem[];
   clients: Client[];
   workOrders: WorkOrder[];
   draftOrder: WorkOrder;
   onAddServiceToDraft: (service: ServiceItem) => void;
+  onAddScreenToDraft: (screen: ScreenCatalogItem) => void;
+  onSaveScreen: (screen: ScreenCatalogItem) => void;
+  onDeleteScreen: (id: string) => void;
   onRemoveLineFromDraft: (lineId: string) => void;
   onStartNewBudget: () => void;
   onOpenOrderInBudget: (orderId: string) => void;
   onNavigateTab: (tab: 'ordens' | 'agenda' | 'orcamento' | 'cadastros') => void;
+  onNavigateToClients: () => void;
 }
 
 const CATEGORY_CARDS: {
@@ -47,9 +59,9 @@ const CATEGORY_CARDS: {
 }[] = [
   {
     id: 'telas',
-    title: 'Troca de Telas',
-    subtitle: 'Celulares Android, iPhone e Notebooks',
-    icon: Smartphone,
+    title: 'TELAS',
+    subtitle: 'iPhone, Samsung, Motorola e Xiaomi',
+    icon: MonitorSmartphone,
   },
   {
     id: 'celulares',
@@ -74,16 +86,22 @@ const CATEGORY_CARDS: {
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   store,
   services,
+  screenCatalog,
   clients,
   workOrders,
   draftOrder,
   onAddServiceToDraft,
+  onAddScreenToDraft,
+  onSaveScreen,
+  onDeleteScreen,
   onRemoveLineFromDraft,
   onStartNewBudget,
   onOpenOrderInBudget,
   onNavigateTab,
+  onNavigateToClients,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategoryId | null>(null);
+  const [screensModalOpen, setScreensModalOpen] = useState(false);
 
   const activeOrders = workOrders.filter((o) => o.status !== 'entregue');
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
@@ -95,11 +113,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         draftOrder.cashDiscountPercent,
         store.cardRates,
         draftOrder.selectedInstallments,
-        draftOrder.cardMode
+        draftOrder.cardMode,
+        getPickupFeeAmount(draftOrder.pickupDeliveryFee)
       ),
     [
       draftOrder.items,
       draftOrder.cashDiscountPercent,
+      draftOrder.pickupDeliveryFee,
       store.cardRates,
       draftOrder.selectedInstallments,
       draftOrder.cardMode,
@@ -109,6 +129,41 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const categoryServices = selectedCategory
     ? services.filter((s) => s.category === selectedCategory)
     : [];
+
+  const quickActions = [
+    {
+      id: 'orcamento',
+      title: 'Novo Orçamento A4',
+      subtitle: 'Montar proposta e PDF',
+      meta: `${draftOrder.items.length} item(ns) no rascunho`,
+      icon: FilePlus2,
+      onClick: () => onNavigateTab('orcamento'),
+    },
+    {
+      id: 'ordens',
+      title: 'Ordens de Serviço',
+      subtitle: 'Status e garantia de 90 dias',
+      meta: `${activeOrders.length} em andamento`,
+      icon: ClipboardList,
+      onClick: () => onNavigateTab('ordens'),
+    },
+    {
+      id: 'clientes',
+      title: 'Clientes',
+      subtitle: 'Histórico e aparelhos salvos',
+      meta: `${clients.length} ${clients.length === 1 ? 'cadastrado' : 'cadastrados'}`,
+      icon: Users,
+      onClick: onNavigateToClients,
+    },
+    {
+      id: 'cadastros',
+      title: 'Valores e Loja',
+      subtitle: 'Editar preços, taxas e PIX',
+      meta: `${services.length + screenCatalog.length} itens no catálogo`,
+      icon: FolderCog,
+      onClick: () => onNavigateTab('cadastros'),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -142,7 +197,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
       </section>
 
-      {/* Service Categories Grid styled after Reference Screenshot 2 */}
+      {/* Block 1: Large Quick-Access Service Categories (TELAS opens 4 brands) */}
       <section aria-labelledby="categories-heading" className="space-y-3.5">
         <div className="flex items-baseline justify-between gap-4">
           <h2
@@ -152,7 +207,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             Escolha o Serviço para Orçar
           </h2>
           <span className="text-xs text-[var(--text-muted)] text-right">
-            Toque em um ícone para adicionar
+            Toque em um bloco para abrir
           </span>
         </div>
 
@@ -171,25 +226,34 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`group text-left rounded-2xl p-4 sm:p-5 transition-all active:scale-[0.99] flex flex-col justify-between gap-4 cursor-pointer min-h-[168px] border ${
+                onClick={() => {
+                  if (cat.id === 'telas') {
+                    setScreensModalOpen(true);
+                  } else {
+                    setSelectedCategory(cat.id);
+                  }
+                }}
+                className={`group text-left rounded-2xl p-4 sm:p-5 transition-all active:scale-[0.99] flex flex-col justify-between gap-4 cursor-pointer min-h-[176px] border ${
                   isHighlighted
                     ? 'bg-[var(--surface)] border-[var(--accent)] shadow-sm'
                     : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--surface-2)]'
                 }`}
               >
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
-                    isHighlighted
-                      ? 'bg-[var(--accent)] text-[var(--accent-on)]'
-                      : 'bg-[var(--accent-soft)] border border-[var(--border)] text-[var(--accent-text)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-on)]'
-                  }`}
-                >
-                  <Icon className="w-6 h-6" />
+                <div className="flex items-start justify-between gap-2 w-full">
+                  <div
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors shrink-0 ${
+                      isHighlighted
+                        ? 'bg-[var(--accent)] text-[var(--accent-on)]'
+                        : 'bg-[var(--accent-soft)] border border-[var(--border)] text-[var(--accent-text)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-on)]'
+                    }`}
+                  >
+                    <Icon className="w-7 h-7" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent-text)] transition-colors shrink-0 mt-1" />
                 </div>
 
                 <div className="space-y-1">
-                  <h3 className="font-display text-sm sm:text-base font-bold text-[var(--text-primary)] leading-snug">
+                  <h3 className="font-display text-sm sm:text-base font-extrabold text-[var(--text-primary)] leading-snug">
                     {cat.title}
                   </h3>
                   <p className="text-xs text-[var(--text-muted)] line-clamp-2 leading-relaxed">
@@ -204,7 +268,57 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   >
                     {catQty > 0
                       ? `${catQty} item(ns) · ${formatBRL(catSum)}`
-                      : 'Toque para adicionar'}
+                      : cat.id === 'telas'
+                        ? `${screenCatalog.length} modelos · 4 marcas`
+                        : 'Toque para adicionar'}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Block 2: Quick Navigation Blocks */}
+      <section aria-labelledby="quick-access-heading" className="space-y-3.5">
+        <div className="flex items-baseline justify-between gap-4">
+          <h2
+            id="quick-access-heading"
+            className="font-display text-lg sm:text-xl font-bold text-[var(--text-primary)]"
+          >
+            Acesso Rápido
+          </h2>
+          <span className="text-xs text-[var(--text-muted)] text-right">
+            Atalhos do atendimento
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          {quickActions.map((act) => {
+            const Icon = act.icon;
+            return (
+              <button
+                key={act.id}
+                type="button"
+                onClick={act.onClick}
+                className="group text-left rounded-2xl p-4 sm:p-5 bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--surface-2)] transition-all active:scale-[0.99] flex flex-col justify-between gap-3.5 cursor-pointer min-h-[144px]"
+              >
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <div className="w-12 h-12 rounded-xl bg-[var(--accent-soft)] border border-[var(--border)] text-[var(--accent-text)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-on)] flex items-center justify-center transition-colors shrink-0">
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent-text)] shrink-0" />
+                </div>
+
+                <div className="space-y-0.5">
+                  <h3 className="font-display text-sm sm:text-base font-bold text-[var(--text-primary)] leading-snug">
+                    {act.title}
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)] line-clamp-1">
+                    {act.subtitle}
+                  </p>
+                  <p className="text-[11px] font-num text-[var(--accent-text)] pt-1">
+                    {act.meta}
                   </p>
                 </div>
               </button>
@@ -225,7 +339,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {draftOrder.items.length > 0 && (
+            {(draftOrder.items.length > 0 ||
+              draftOrder.freeScreenProtector ||
+              draftOrder.pickupDeliveryFee === 'taxa_10') && (
               <button
                 type="button"
                 onClick={onStartNewBudget}
@@ -245,7 +361,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
 
-        {draftOrder.items.length > 0 && (
+        {(draftOrder.items.length > 0 ||
+          draftOrder.freeScreenProtector ||
+          draftTotals.pickupFee > 0) && (
           <div className="divide-y divide-[var(--border)]">
             {draftOrder.items.map((item) => (
               <div
@@ -279,6 +397,28 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 </div>
               </div>
             ))}
+
+            {draftOrder.freeScreenProtector && (
+              <div className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                <p className="font-semibold text-emerald-400 truncate">
+                  {FREE_PROTECTOR_DESCRIPTION}
+                </p>
+                <span className="font-num text-xs text-emerald-400 shrink-0">
+                  GRÁTIS (R$ 0,00)
+                </span>
+              </div>
+            )}
+
+            {draftTotals.pickupFee > 0 && (
+              <div className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                <p className="font-semibold text-[var(--text-primary)] truncate">
+                  Deslocamento — Busca do aparelho no endereço do cliente
+                </p>
+                <span className="font-num text-sm text-[var(--text-primary)] shrink-0">
+                  {formatBRL(draftTotals.pickupFee)}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -291,7 +431,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               {formatBRL(draftTotals.cashTotal)}
             </p>
             <p className="text-xs text-[var(--text-secondary)] mt-0.5 font-num">
-              Desconto de {draftTotals.cashDiscountPercent}% aplicado
+              Desconto de {draftTotals.cashDiscountPercent}% aplicado nos serviços
+              {draftTotals.pickupFee > 0
+                ? ` · Deslocamento ${formatBRL(draftTotals.pickupFee)}`
+                : ''}
             </p>
           </div>
 
@@ -341,7 +484,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 order.cashDiscountPercent,
                 store.cardRates,
                 order.selectedInstallments,
-                order.cardMode
+                order.cardMode,
+                getPickupFeeAmount(order.pickupDeliveryFee)
               );
               return (
                 <div
@@ -359,7 +503,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       </span>
                     </div>
                     <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-0.5">
-                      {order.deviceBrandModel}
+                      {order.deviceBrandModel || 'Aparelho não informado'}
                     </p>
                     <p className="text-xs text-[var(--text-muted)] truncate">
                       {client?.name || 'Cliente Balcão'}
@@ -392,7 +536,20 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         )}
       </section>
 
-      {/* Multi-Service Picker Modal when tapping any Category Card */}
+      {/* 4-Brand TELAS Modal */}
+      <ScreenCatalogModal
+        open={screensModalOpen}
+        onClose={() => setScreensModalOpen(false)}
+        screens={screenCatalog}
+        store={store}
+        draftOrder={draftOrder}
+        onSaveScreen={onSaveScreen}
+        onDeleteScreen={onDeleteScreen}
+        onAddScreenToBudget={onAddScreenToDraft}
+        onOpenBudget={() => onNavigateTab('orcamento')}
+      />
+
+      {/* Multi-Service Picker Modal for other Categories */}
       {selectedCategory && (
         <div
           className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"

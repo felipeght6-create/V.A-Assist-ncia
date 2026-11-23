@@ -6,15 +6,25 @@ import {
   FileText,
   Plus,
   Search,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 import { Client, StoreProfile, WorkOrder, WorkOrderStatus } from '../types';
 import {
+  SCREEN_WARRANTY_COVERAGE,
+  SCREEN_WARRANTY_EXCLUSIONS,
+  SCREEN_WARRANTY_LEGAL_NOTE,
+} from '../data/seed';
+import {
+  FREE_PROTECTOR_DESCRIPTION,
   STATUS_LABELS,
   STATUS_ORDER,
+  addDaysYMD,
   calculateBudgetTotals,
   formatBRL,
   formatDateBR,
+  getPickupFeeAmount,
+  getTodayYMD,
 } from '../utils/format';
 import { generateBudgetPDF } from '../utils/pdfGenerator';
 
@@ -24,6 +34,11 @@ interface WorkOrdersViewProps {
   store: StoreProfile;
   onUpdateStatus: (orderId: string, status: WorkOrderStatus) => void;
   onUpdateNotes: (orderId: string, technicianNotes: string) => void;
+  onUpdateWarranty: (
+    orderId: string,
+    warrantyStartDate: string,
+    warrantyEndDate: string
+  ) => void;
   onOpenInBudget: (orderId: string) => void;
   onCreateNewOrder: () => void;
   onDeleteOrder: (orderId: string) => void;
@@ -35,6 +50,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   store,
   onUpdateStatus,
   onUpdateNotes,
+  onUpdateWarranty,
   onOpenInBudget,
   onCreateNewOrder,
   onDeleteOrder,
@@ -158,16 +174,24 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
         <div className="space-y-3">
           {filteredOrders.map((order) => {
             const client = clientMap.get(order.clientId);
+            const pickupFee = getPickupFeeAmount(order.pickupDeliveryFee);
             const totals = calculateBudgetTotals(
               order.items,
               order.cashDiscountPercent,
               store.cardRates,
               order.selectedInstallments,
-              order.cardMode
+              order.cardMode,
+              pickupFee
             );
             const isExpanded = expandedId === order.id;
             const currentStepIdx = STATUS_ORDER.indexOf(order.status);
             const nextStatus = getNextStatus(order.status);
+            const warrantyDays = order.warrantyDays || store.defaultWarrantyDays || 90;
+            const warrantyStart =
+              order.warrantyStartDate ||
+              (order.createdAt ? order.createdAt.slice(0, 10) : getTodayYMD());
+            const warrantyEnd =
+              order.warrantyEndDate || addDaysYMD(warrantyStart, warrantyDays);
 
             return (
               <article
@@ -296,7 +320,7 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
 
                       <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 space-y-2.5">
                         <p className="text-xs font-bold text-[var(--accent-text)]">
-                          PEÇAS E MÃO DE OBRA ({order.items.length} itens)
+                          PEÇAS, MÃO DE OBRA E CONDIÇÕES ({order.items.length} itens)
                         </p>
                         <div className="divide-y divide-[var(--border)] text-xs">
                           {order.items.map((item) => (
@@ -312,16 +336,106 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
                               </span>
                             </div>
                           ))}
+                          {order.freeScreenProtector && (
+                            <div className="py-2 flex items-center justify-between gap-2">
+                              <span className="text-emerald-400 font-semibold truncate">
+                                {FREE_PROTECTOR_DESCRIPTION}
+                              </span>
+                              <span className="font-num text-emerald-400 shrink-0">
+                                GRÁTIS
+                              </span>
+                            </div>
+                          )}
+                          <div className="py-2 flex items-center justify-between gap-2">
+                            <span className="text-[var(--text-secondary)] truncate">
+                              Deslocamento (Busca do aparelho)
+                            </span>
+                            <span className="font-num text-[var(--text-primary)] shrink-0">
+                              {pickupFee > 0 ? formatBRL(pickupFee) : 'GRÁTIS'}
+                            </span>
+                          </div>
                         </div>
-                        <div className="pt-2 border-t border-[var(--border)] flex items-center justify-between text-xs text-[var(--text-muted)] tabular-nums">
+                        <div className="pt-2 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)] tabular-nums">
                           <span>
                             Peças: <strong className="text-[var(--text-primary)]">{formatBRL(totals.partsSubtotal)}</strong>
                           </span>
                           <span>
                             Mão de obra: <strong className="text-[var(--text-primary)]">{formatBRL(totals.laborSubtotal)}</strong>
                           </span>
+                          <span>
+                            Total À Vista: <strong className="text-[var(--accent-text)]">{formatBRL(totals.cashTotal)}</strong>
+                          </span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* 90-Day Legal Warranty Record on the OS */}
+                    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-bold text-[var(--accent-text)] inline-flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>REGISTRO DE GARANTIA ({warrantyDays} DIAS)</span>
+                        </p>
+                        <span className="text-[11px] font-num text-[var(--text-muted)]">
+                          Vigência: {formatDateBR(warrantyStart)} até {formatDateBR(warrantyEnd)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
+                            Data de Instalação
+                          </label>
+                          <input
+                            type="date"
+                            value={warrantyStart}
+                            onChange={(e) => {
+                              const nextStart = e.target.value || getTodayYMD();
+                              onUpdateWarranty(
+                                order.id,
+                                nextStart,
+                                addDaysYMD(nextStart, warrantyDays)
+                              );
+                            }}
+                            className="w-full min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-[var(--text-secondary)] mb-1">
+                            Data de Término ({warrantyDays} dias)
+                          </label>
+                          <input
+                            type="date"
+                            value={warrantyEnd}
+                            onChange={(e) =>
+                              onUpdateWarranty(order.id, warrantyStart, e.target.value)
+                            }
+                            className="w-full min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--input-bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 text-xs">
+                        <div className="space-y-1">
+                          <p className="font-bold text-emerald-400">A garantia cobre:</p>
+                          <ul className="list-disc pl-4 space-y-0.5 text-[var(--text-secondary)]">
+                            {SCREEN_WARRANTY_COVERAGE.map((rule) => (
+                              <li key={rule}>{rule}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="font-bold text-rose-400">A garantia não cobre:</p>
+                          <ul className="list-disc pl-4 space-y-0.5 text-[var(--text-secondary)]">
+                            {SCREEN_WARRANTY_EXCLUSIONS.map((rule) => (
+                              <li key={rule}>{rule}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        {SCREEN_WARRANTY_LEGAL_NOTE}
+                      </p>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">

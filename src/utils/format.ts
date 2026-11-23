@@ -1,4 +1,12 @@
-import { BudgetLineItem, CardMode, InstallmentRate, ServiceCategoryId, WorkOrderStatus } from '../types';
+import {
+  BudgetLineItem,
+  CardMode,
+  InstallmentRate,
+  PickupDeliveryOption,
+  ScreenBrandId,
+  ServiceCategoryId,
+  WorkOrderStatus,
+} from '../types';
 
 export function formatBRL(value: number): string {
   const safe = Number.isFinite(value) ? value : 0;
@@ -64,6 +72,24 @@ export const STATUS_ORDER: WorkOrderStatus[] = [
   'entregue',
 ];
 
+export const SCREEN_BRAND_LABELS: Record<ScreenBrandId, string> = {
+  iphone: 'iPhone',
+  samsung: 'Samsung',
+  motorola: 'Motorola',
+  xiaomi: 'Xiaomi',
+};
+
+export const FREE_PROTECTOR_DESCRIPTION =
+  'PELÍCULA GRÁTIS – CORTESIA DA ASSISTÊNCIA.';
+
+export const PICKUP_FEE_VALUE = 10;
+
+export function getPickupFeeAmount(
+  pickupDeliveryFee?: PickupDeliveryOption
+): number {
+  return pickupDeliveryFee === 'taxa_10' ? PICKUP_FEE_VALUE : 0;
+}
+
 export interface CalculatedInstallment {
   installments: number;
   feePercent: number;
@@ -74,6 +100,8 @@ export interface CalculatedInstallment {
 export interface BudgetTotals {
   partsSubtotal: number;
   laborSubtotal: number;
+  servicesSubtotal: number;
+  pickupFee: number;
   grossSubtotal: number;
   cashDiscountPercent: number;
   cashDiscountAmount: number;
@@ -87,7 +115,8 @@ export function calculateBudgetTotals(
   cashDiscountPercent: number,
   cardRates: InstallmentRate[],
   selectedInstallments: number,
-  cardMode: CardMode
+  cardMode: CardMode,
+  pickupFee = 0
 ): BudgetTotals {
   let partsSubtotal = 0;
   let laborSubtotal = 0;
@@ -98,10 +127,12 @@ export function calculateBudgetTotals(
     laborSubtotal += (Number(item.laborPrice) || 0) * qty;
   }
 
-  const grossSubtotal = partsSubtotal + laborSubtotal;
+  const servicesSubtotal = partsSubtotal + laborSubtotal;
+  const safePickupFee = Math.max(0, Number(pickupFee) || 0);
+  const grossSubtotal = servicesSubtotal + safePickupFee;
   const safeDiscount = Math.max(0, Math.min(50, Number(cashDiscountPercent) || 0));
-  const cashDiscountAmount = grossSubtotal * (safeDiscount / 100);
-  const cashTotal = Math.max(0, grossSubtotal - cashDiscountAmount);
+  const cashDiscountAmount = servicesSubtotal * (safeDiscount / 100);
+  const cashTotal = Math.max(0, servicesSubtotal - cashDiscountAmount) + safePickupFee;
 
   const rates = cardRates.length > 0
     ? cardRates
@@ -133,6 +164,8 @@ export function calculateBudgetTotals(
   return {
     partsSubtotal,
     laborSubtotal,
+    servicesSubtotal,
+    pickupFee: safePickupFee,
     grossSubtotal,
     cashDiscountPercent: safeDiscount,
     cashDiscountAmount,
@@ -145,3 +178,4 @@ export function calculateBudgetTotals(
 export function generateId(prefix = 'id'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
+

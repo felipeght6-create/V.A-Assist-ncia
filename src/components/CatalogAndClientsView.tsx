@@ -4,6 +4,7 @@ import {
   Check,
   Edit3,
   FileText,
+  MonitorSmartphone,
   Plus,
   Search,
   Trash2,
@@ -14,28 +15,56 @@ import {
 } from 'lucide-react';
 import {
   Client,
+  ScreenCatalogItem,
   ServiceCategoryId,
   ServiceItem,
   StoreProfile,
+  WorkOrder,
 } from '../types';
-import { CATEGORY_LABELS, formatBRL, generateId } from '../utils/format';
+import {
+  CATEGORY_LABELS,
+  STATUS_LABELS,
+  calculateBudgetTotals,
+  formatBRL,
+  formatDateBR,
+  generateId,
+  getPickupFeeAmount,
+} from '../utils/format';
 import { PWAAppInstallCard } from './PWAInstallBanner';
+import { ScreenCatalogContent } from './ScreenCatalogModal';
 
-type SubTab = 'clientes' | 'servicos' | 'empresa';
+type SubTab = 'clientes' | 'servicos' | 'telas' | 'empresa';
 
 interface CatalogAndClientsViewProps {
   clients: Client[];
+  workOrders: WorkOrder[];
   services: ServiceItem[];
+  screenCatalog: ScreenCatalogItem[];
   store: StoreProfile;
   initialSubTab?: SubTab | null;
   onClearInitialSubTab?: () => void;
-  onSaveClient: (client: Client) => void;
+  onSaveClient: (
+    client: Client,
+    options?: {
+      initialServiceId?: string;
+      customServiceText?: string;
+      initialDevice?: string;
+      isNew?: boolean;
+      openBudgetAfter?: boolean;
+    }
+  ) => void;
   onDeleteClient: (id: string) => void;
+  onClearAllClients: () => void;
   onSaveService: (service: ServiceItem) => void;
   onDeleteService: (id: string) => void;
+  onSaveScreen: (screen: ScreenCatalogItem) => void;
+  onDeleteScreen: (id: string) => void;
   onUpdateStore: (store: StoreProfile) => void;
+  onOpenOrderInBudget: (orderId: string) => void;
   onStartBudgetForClient: (clientId: string) => void;
+  onStartNewBudgetForClient: (clientId: string) => void;
   onStartBudgetForService: (service: ServiceItem) => void;
+  onStartBudgetForScreen: (screen: ScreenCatalogItem) => void;
   onExportBackup: () => void;
   onImportBackup: (file: File) => void;
   backupMessage?: string | null;
@@ -45,17 +74,25 @@ const SUBTAB_STORAGE_KEY = 'va_assistencia_catalog_subtab_v1';
 
 export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   clients,
+  workOrders,
   services,
+  screenCatalog,
   store,
   initialSubTab,
   onClearInitialSubTab,
   onSaveClient,
   onDeleteClient,
+  onClearAllClients,
   onSaveService,
   onDeleteService,
+  onSaveScreen,
+  onDeleteScreen,
   onUpdateStore,
+  onOpenOrderInBudget,
   onStartBudgetForClient,
+  onStartNewBudgetForClient,
   onStartBudgetForService,
+  onStartBudgetForScreen,
   onExportBackup,
   onImportBackup,
   backupMessage,
@@ -64,7 +101,12 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
     if (initialSubTab) return initialSubTab;
     try {
       const saved = sessionStorage.getItem(SUBTAB_STORAGE_KEY);
-      if (saved === 'clientes' || saved === 'servicos' || saved === 'empresa') {
+      if (
+        saved === 'clientes' ||
+        saved === 'servicos' ||
+        saved === 'telas' ||
+        saved === 'empresa'
+      ) {
         return saved;
       }
     } catch {
@@ -92,6 +134,7 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   }, [subTab]);
 
   const [clientModalOpen, setClientModalOpen] = useState(false);
+  const [confirmClearClients, setConfirmClearClients] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [cName, setCName] = useState('');
   const [cPhone, setCPhone] = useState('');
@@ -99,6 +142,8 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   const [cCpfCnpj, setCCpfCnpj] = useState('');
   const [cAddress, setCAddress] = useState('');
   const [cNotes, setCNotes] = useState('');
+  const [cDevice, setCDevice] = useState('');
+  const [cServiceId, setCServiceId] = useState('');
 
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
@@ -115,13 +160,26 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   const filteredClients = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return clients;
-    return clients.filter(
-      (c) =>
+    return clients.filter((c) => {
+      if (
         c.name.toLowerCase().includes(q) ||
         c.phone.toLowerCase().includes(q) ||
-        c.cpfCnpj.toLowerCase().includes(q)
-    );
-  }, [clients, search]);
+        c.cpfCnpj.toLowerCase().includes(q) ||
+        (c.notes || '').toLowerCase().includes(q)
+      ) {
+        return true;
+      }
+      const clientOrders = workOrders.filter((o) => o.clientId === c.id);
+      return clientOrders.some(
+        (o) =>
+          o.code.toLowerCase().includes(q) ||
+          (o.deviceBrandModel || '').toLowerCase().includes(q) ||
+          (o.reportedIssue || '').toLowerCase().includes(q) ||
+          (o.technicianNotes || '').toLowerCase().includes(q) ||
+          o.items.some((it) => it.name.toLowerCase().includes(q))
+      );
+    });
+  }, [clients, workOrders, search]);
 
   const filteredServices = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -144,6 +202,8 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
       setCCpfCnpj(client.cpfCnpj);
       setCAddress(client.address);
       setCNotes(client.notes);
+      setCDevice('');
+      setCServiceId('');
     } else {
       setEditingClient(null);
       setCName('');
@@ -152,6 +212,8 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
       setCCpfCnpj('');
       setCAddress('');
       setCNotes('');
+      setCDevice('');
+      setCServiceId('');
     }
     setClientModalOpen(true);
   };
@@ -159,6 +221,11 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
   const handleSaveClientForm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!cName.trim()) return;
+    const chosenSrv = cServiceId
+      ? services.find((s) => s.id === cServiceId)
+      : undefined;
+    const mergedNotes = cNotes.trim() || (chosenSrv ? chosenSrv.name : '');
+
     const saved: Client = {
       id: editingClient ? editingClient.id : generateId('cli'),
       name: cName.trim(),
@@ -166,10 +233,15 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
       email: cEmail.trim(),
       cpfCnpj: cCpfCnpj.trim(),
       address: cAddress.trim(),
-      notes: cNotes.trim(),
+      notes: mergedNotes,
       createdAt: editingClient ? editingClient.createdAt : new Date().toISOString(),
     };
-    onSaveClient(saved);
+    onSaveClient(saved, {
+      initialServiceId: !editingClient && cServiceId ? cServiceId : undefined,
+      customServiceText: !editingClient && cNotes.trim() ? cNotes.trim() : undefined,
+      initialDevice: !editingClient && cDevice.trim() ? cDevice.trim() : undefined,
+      isNew: !editingClient,
+    });
     setSearch('');
     setClientModalOpen(false);
     setClientSavedBanner(`Cliente "${saved.name}" salvo no cadastro!`);
@@ -258,6 +330,22 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
           <button
             type="button"
             onClick={() => {
+              setSubTab('telas');
+              setSearch('');
+            }}
+            className={`flex-1 md:flex-initial min-h-[42px] px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer ${
+              subTab === 'telas'
+                ? 'bg-[var(--accent)] text-[var(--accent-on)] shadow-xs'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <MonitorSmartphone className="w-4 h-4" />
+            <span>Telas ({screenCatalog.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               setSubTab('clientes');
               setSearch('');
             }}
@@ -285,6 +373,18 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* TAB: TELAS POR MARCA */}
+      {subTab === 'telas' && (
+        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 sm:p-5">
+          <ScreenCatalogContent
+            screens={screenCatalog}
+            onSaveScreen={onSaveScreen}
+            onDeleteScreen={onDeleteScreen}
+            onAddScreenToBudget={onStartBudgetForScreen}
+          />
+        </div>
+      )}
 
       {/* TAB 1: SERVIÇOS E PEÇAS */}
       {subTab === 'servicos' && (
@@ -463,19 +563,60 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar cliente por nome, telefone ou CPF/CNPJ..."
+                placeholder="Buscar cliente por nome, telefone ou serviço feito..."
                 className="w-full min-h-[44px] pl-10 pr-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--input-bg)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)]"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => openClientModal()}
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-sm font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Cadastrar Cliente</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {clients.length > 0 && !confirmClearClients && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearClients(true)}
+                  className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:text-red-400 hover:border-red-400/50 inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Zerar Clientes</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => openClientModal()}
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-sm font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Cadastrar Cliente</span>
+              </button>
+            </div>
           </div>
+
+          {confirmClearClients && (
+            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-xs sm:text-sm text-[var(--text-primary)] font-medium">
+                Deseja zerar todos os clientes cadastrados e seus históricos?
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearClients(false)}
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] text-xs font-semibold text-[var(--text-primary)] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearAllClients();
+                    setConfirmClearClients(false);
+                    setClientSavedBanner('Todos os clientes foram zerados!');
+                    setTimeout(() => setClientSavedBanner(null), 3500);
+                  }}
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Sim, zerar tudo
+                </button>
+              </div>
+            </div>
+          )}
 
           {filteredClients.length === 0 ? (
             <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-10 text-center space-y-3">
@@ -487,7 +628,7 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
               </h3>
               <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto">
                 {clients.length === 0
-                  ? 'Cadastre seus clientes para agilizar orçamentos A4, agendamentos e ordens de serviço.'
+                  ? 'Cadastre cada cliente (ex: Vanessa — troca de tela, Carlos — troca de película) para manter todo o histórico e orçamento salvos.'
                   : 'Tente buscar por outro nome, telefone ou CPF/CNPJ.'}
               </p>
               {clients.length === 0 && (
@@ -503,66 +644,155 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredClients.map((client) => (
-                <div
-                  key={client.id}
-                  className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col justify-between gap-4"
-                >
-                  <div className="space-y-1.5">
-                    <h3 className="font-display text-base font-bold text-[var(--text-primary)]">
-                      {client.name}
-                    </h3>
-                    <div className="text-xs text-[var(--text-secondary)] space-y-0.5">
-                      <p>
-                        <span className="text-[var(--text-muted)]">WhatsApp/Tel:</span>{' '}
-                        <span className="font-medium text-[var(--text-primary)]">{client.phone || '-'}</span>
-                      </p>
-                      <p>
-                        <span className="text-[var(--text-muted)]">CPF/CNPJ:</span>{' '}
-                        <span className="font-num text-[var(--text-primary)]">{client.cpfCnpj || '-'}</span>
-                      </p>
-                      {client.address && (
-                        <p>
-                          <span className="text-[var(--text-muted)]">Endereço:</span> {client.address}
+              {filteredClients.map((client) => {
+                const clientOrders = workOrders
+                  .filter((o) => o.clientId === client.id)
+                  .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+                return (
+                  <div
+                    key={client.id}
+                    className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col justify-between gap-4"
+                  >
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-display text-base font-bold text-[var(--text-primary)]">
+                            {client.name}
+                          </h3>
+                          <span className="font-num text-[11px] font-bold text-[var(--accent-text)] bg-[var(--accent-soft)] px-2 py-0.5 rounded-md shrink-0">
+                            {clientOrders.length} {clientOrders.length === 1 ? 'orçamento' : 'orçamentos'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-[var(--text-secondary)] space-y-0.5">
+                          {client.phone && (
+                            <p>
+                              <span className="text-[var(--text-muted)]">WhatsApp/Tel:</span>{' '}
+                              <span className="font-medium text-[var(--text-primary)]">{client.phone}</span>
+                            </p>
+                          )}
+                          {client.cpfCnpj && (
+                            <p>
+                              <span className="text-[var(--text-muted)]">CPF/CNPJ:</span>{' '}
+                              <span className="font-num text-[var(--text-primary)]">{client.cpfCnpj}</span>
+                            </p>
+                          )}
+                          {client.address && (
+                            <p>
+                              <span className="text-[var(--text-muted)]">Endereço:</span> {client.address}
+                            </p>
+                          )}
+                          {client.notes && (
+                            <p className="text-[var(--text-primary)] bg-[var(--surface-2)] border border-[var(--border)] rounded-lg px-2.5 py-1.5 mt-1.5">
+                              <span className="text-[var(--text-muted)]">O que foi feito: </span>
+                              <span className="font-medium">{client.notes}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Per-Client Saved Orders / Services History */}
+                      <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                          Histórico de Orçamentos &amp; Serviços
                         </p>
-                      )}
-                      {client.notes && (
-                        <p className="text-[var(--text-muted)] pt-1">{client.notes}</p>
-                      )}
+                        {clientOrders.length === 0 ? (
+                          <p className="text-xs text-[var(--text-muted)]">
+                            Nenhum orçamento lançado ainda para {client.name}.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {clientOrders.map((ord) => {
+                              const ordTotals = calculateBudgetTotals(
+                                ord.items,
+                                ord.cashDiscountPercent,
+                                store.cardRates,
+                                ord.selectedInstallments,
+                                ord.cardMode,
+                                getPickupFeeAmount(ord.pickupDeliveryFee)
+                              );
+                              const itemsSummary =
+                                ord.items.map((it) => `${it.qty}x ${it.name}`).join(' · ') ||
+                                ord.reportedIssue ||
+                                'Orçamento em aberto';
+                              return (
+                                <button
+                                  key={ord.id}
+                                  type="button"
+                                  onClick={() => onOpenOrderInBudget(ord.id)}
+                                  className="w-full text-left p-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-hover)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors space-y-1 cursor-pointer"
+                                >
+                                  <div className="flex items-center justify-between gap-2 text-xs">
+                                    <span className="font-num font-bold text-[var(--accent-text)]">
+                                      {ord.code} · {STATUS_LABELS[ord.status]}
+                                    </span>
+                                    <span className="font-num font-bold text-[var(--text-primary)]">
+                                      {formatBRL(ordTotals.cashTotal)}
+                                    </span>
+                                  </div>
+                                  {ord.deviceBrandModel && (
+                                    <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                                      {ord.deviceBrandModel}
+                                    </p>
+                                  )}
+                                  <p className="text-xs text-[var(--text-secondary)] line-clamp-2">
+                                    {itemsSummary}
+                                  </p>
+                                  <p className="text-[10px] text-[var(--text-muted)] font-num">
+                                    Atualizado em {formatDateBR(ord.updatedAt)} · Toque para abrir o orçamento A4
+                                  </p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openClientModal(client)}
+                          className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent-text)] inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteClient(client.id)}
+                          aria-label="Excluir cliente"
+                          className="min-h-[40px] min-w-[40px] rounded-xl text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {clientOrders.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => onStartNewBudgetForClient(client.id)}
+                            className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent)] inline-flex items-center gap-1 whitespace-nowrap cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Novo</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => onStartBudgetForClient(client.id)}
+                          className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-xs font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{clientOrders.length > 0 ? 'Ver Orçamento' : 'Novo Orçamento'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => openClientModal(client)}
-                        className="min-h-[40px] px-3 py-1.5 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent-text)] inline-flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        <span>Editar</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteClient(client.id)}
-                        aria-label="Excluir cliente"
-                        className="min-h-[40px] min-w-[40px] rounded-xl text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 flex items-center justify-center cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => onStartBudgetForClient(client.id)}
-                      className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[var(--accent)] text-[var(--accent-on)] text-xs font-semibold hover:bg-[var(--accent-hover)] inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>Novo Orçamento</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -920,14 +1150,48 @@ export const CatalogAndClientsView: React.FC<CatalogAndClientsViewProps> = ({
                   className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>
+              {!editingClient && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                      Aparelho / Equipamento
+                    </label>
+                    <input
+                      type="text"
+                      value={cDevice}
+                      onChange={(e) => setCDevice(e.target.value)}
+                      placeholder="Ex: iPhone 13, Samsung A54, Notebook Dell..."
+                      className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                      Serviço Realizado (Catálogo — Opcional)
+                    </label>
+                    <select
+                      value={cServiceId}
+                      onChange={(e) => setCServiceId(e.target.value)}
+                      className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="">Selecionar serviço pronto ou descrever abaixo...</option>
+                      {services.map((srv) => (
+                        <option key={srv.id} value={srv.id}>
+                          {srv.name} ({formatBRL(srv.partPrice + srv.laborPrice)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Observações
+                  O que foi feito / Observações
                 </label>
                 <textarea
                   rows={2}
                   value={cNotes}
                   onChange={(e) => setCNotes(e.target.value)}
+                  placeholder="Ex: Troca de tela, troca de película 3D, limpeza..."
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>

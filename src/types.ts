@@ -4,6 +4,18 @@ export type ServiceCategoryId =
   | 'notebooks'
   | 'acessorios';
 
+export type ScreenBrandId = 'iphone' | 'samsung' | 'motorola' | 'xiaomi';
+
+export interface ScreenCatalogItem {
+  id: string;
+  brand: ScreenBrandId;
+  phoneModel: string;
+  screenType: string;
+  price: number;
+  warrantyDays: number;
+  createdAt?: string;
+}
+
 export type WorkOrderStatus =
   | 'aguardando'
   | 'orcamento'
@@ -18,6 +30,8 @@ export type AppointmentStatus =
   | 'cancelado';
 
 export type CardMode = 'sem_juros' | 'com_taxa';
+
+export type PickupDeliveryOption = 'gratis' | 'taxa_10';
 
 export interface ServiceItem {
   id: string;
@@ -69,10 +83,14 @@ export interface WorkOrder {
   checklist: DeviceChecklist;
   status: WorkOrderStatus;
   items: BudgetLineItem[];
+  freeScreenProtector?: boolean;
+  pickupDeliveryFee?: PickupDeliveryOption;
   cashDiscountPercent: number;
   cardMode: CardMode;
   selectedInstallments: number;
   warrantyDays: number;
+  warrantyStartDate?: string;
+  warrantyEndDate?: string;
   validityDays: number;
   deliveryForecast: string;
   createdAt: string;

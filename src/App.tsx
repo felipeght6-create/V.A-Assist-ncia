@@ -11,6 +11,7 @@ import {
   Appointment,
   AppointmentStatus,
   Client,
+  ScreenCatalogItem,
   ServiceCategoryId,
   ServiceItem,
   StoreProfile,
@@ -22,10 +23,12 @@ import {
   DEFAULT_STORE_PROFILE,
   INITIAL_APPOINTMENTS,
   INITIAL_CLIENTS,
+  INITIAL_SCREEN_CATALOG,
   INITIAL_SERVICES,
   INITIAL_WORK_ORDERS,
 } from './data/seed';
 import {
+  SCREEN_BRAND_LABELS,
   addDaysYMD,
   generateId,
   getTodayYMD,
@@ -45,6 +48,7 @@ import {
 const STORAGE_KEYS = {
   store: 'va_assistencia_store_v1',
   services: 'va_assistencia_services_v1',
+  screenCatalog: 'va_assistencia_screen_catalog_v1',
   clients: 'va_assistencia_clients_v1',
   orders: 'va_assistencia_orders_v1',
   appointments: 'va_assistencia_appointments_v1',
@@ -70,25 +74,25 @@ function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
-const SEED_CLIENTS_CLEARED_KEY = 'va_assistencia_seed_clients_cleared_v1';
-const SEED_DEMO_CLIENT_IDS = new Set(['cli_1', 'cli_2', 'cli_3']);
+const ZERO_ALL_CLIENTS_V2_KEY = 'va_assistencia_zero_all_clients_v2';
 
-function loadInitialClients(): Client[] {
-  const loaded = loadFromStorage(STORAGE_KEYS.clients, INITIAL_CLIENTS);
+function ensureCleanClientsResetOnce() {
   try {
-    if (!localStorage.getItem(SEED_CLIENTS_CLEARED_KEY)) {
-      const cleaned = loaded.filter((c) => !SEED_DEMO_CLIENT_IDS.has(c.id));
-      localStorage.setItem(SEED_CLIENTS_CLEARED_KEY, '1');
-      saveToStorage(STORAGE_KEYS.clients, cleaned);
-      return cleaned;
+    if (!localStorage.getItem(ZERO_ALL_CLIENTS_V2_KEY)) {
+      saveToStorage(STORAGE_KEYS.clients, []);
+      saveToStorage(STORAGE_KEYS.orders, []);
+      saveToStorage(STORAGE_KEYS.appointments, []);
+      localStorage.removeItem(STORAGE_KEYS.draft);
+      localStorage.setItem(ZERO_ALL_CLIENTS_V2_KEY, '1');
     }
   } catch {
     // ignore storage errors
   }
-  return loaded;
 }
 
 export default function App() {
+  ensureCleanClientsResetOnce();
+
   const [activeTab, setActiveTab] = useState<AppTab>('inicio');
   const [theme, setTheme] = useState<ThemeId>(() =>
     loadFromStorage<ThemeId>(STORAGE_KEYS.theme, 'charcoal')
@@ -109,7 +113,12 @@ export default function App() {
   const [services, setServices] = useState<ServiceItem[]>(() =>
     loadFromStorage(STORAGE_KEYS.services, INITIAL_SERVICES)
   );
-  const [clients, setClients] = useState<Client[]>(loadInitialClients);
+  const [screenCatalog, setScreenCatalog] = useState<ScreenCatalogItem[]>(() =>
+    loadFromStorage(STORAGE_KEYS.screenCatalog, INITIAL_SCREEN_CATALOG)
+  );
+  const [clients, setClients] = useState<Client[]>(() =>
+    loadFromStorage(STORAGE_KEYS.clients, INITIAL_CLIENTS)
+  );
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() =>
     loadFromStorage(STORAGE_KEYS.orders, INITIAL_WORK_ORDERS)
   );
@@ -120,7 +129,7 @@ export default function App() {
   const [schedulePresetCategory, setSchedulePresetCategory] =
     useState<ServiceCategoryId | null>(null);
   const [catalogInitialSubTab, setCatalogInitialSubTab] =
-    useState<'servicos' | 'clientes' | 'empresa' | null>(null);
+    useState<'servicos' | 'telas' | 'clientes' | 'empresa' | null>(null);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -137,6 +146,7 @@ export default function App() {
   const createBlankOrder = (overrides?: Partial<WorkOrder>): WorkOrder => {
     const nextNum = 1024 + workOrders.length + 1;
     const today = getTodayYMD();
+    const warrantyDays = store.defaultWarrantyDays || 90;
     return {
       id: generateId('os'),
       code: `OS-${nextNum}`,
@@ -153,10 +163,14 @@ export default function App() {
       },
       status: 'orcamento',
       items: [],
+      freeScreenProtector: false,
+      pickupDeliveryFee: 'gratis',
       cashDiscountPercent: store.defaultCashDiscountPercent,
       cardMode: 'com_taxa',
       selectedInstallments: 3,
-      warrantyDays: store.defaultWarrantyDays,
+      warrantyDays,
+      warrantyStartDate: today,
+      warrantyEndDate: addDaysYMD(today, warrantyDays),
       validityDays: store.defaultValidityDays,
       deliveryForecast: addDaysYMD(today, 1),
       createdAt: new Date().toISOString(),
@@ -196,6 +210,10 @@ export default function App() {
   }, [services]);
 
   useEffect(() => {
+    saveToStorage(STORAGE_KEYS.screenCatalog, screenCatalog);
+  }, [screenCatalog]);
+
+  useEffect(() => {
     saveToStorage(STORAGE_KEYS.clients, clients);
   }, [clients]);
 
@@ -213,41 +231,202 @@ export default function App() {
 
   const isExistingDraft = workOrders.some((o) => o.id === draftOrder.id);
 
+  const orderHasContent = (order: WorkOrder): boolean =>
+    order.items.length > 0 ||
+    order.deviceBrandModel.trim() !== '' ||
+    order.reportedIssue.trim() !== '' ||
+    order.technicianNotes.trim() !== '';
+
+  const syncOrderToWorkOrders = (order: WorkOrder) => {
+    if (!order.clientId || !orderHasContent(order)) return;
+    const stamped: WorkOrder = { ...order, updatedAt: new Date().toISOString() };
+    setWorkOrders((prev) => {
+      const exists = prev.some((o) => o.id === stamped.id);
+      const next = exists
+        ? prev.map((o) => (o.id === stamped.id ? stamped : o))
+        : [stamped, ...prev];
+      saveToStorage(STORAGE_KEYS.orders, next);
+      return next;
+    });
+  };
+
+  const handleChangeDraft = (nextOrder: WorkOrder) => {
+    const stamped = { ...nextOrder, updatedAt: new Date().toISOString() };
+    setDraftOrder(stamped);
+    saveToStorage(STORAGE_KEYS.draft, stamped);
+    syncOrderToWorkOrders(stamped);
+  };
+
+  const handleSwitchDraftClient = (newClientId: string) => {
+    if (!newClientId) {
+      handleChangeDraft({ ...draftOrder, clientId: '' });
+      return;
+    }
+    if (!draftOrder.clientId) {
+      // User added items before selecting a client: attach them to this client and save
+      handleChangeDraft({ ...draftOrder, clientId: newClientId });
+      return;
+    }
+    if (draftOrder.clientId === newClientId) return;
+
+    // Ensure current client's order is saved before switching
+    syncOrderToWorkOrders(draftOrder);
+
+    // Load the selected client's latest saved order, or start a fresh order for them
+    const clientOrders = workOrders
+      .filter((o) => o.clientId === newClientId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+    if (clientOrders[0]) {
+      const loaded = {
+        ...clientOrders[0],
+        items: clientOrders[0].items.map((i) => ({ ...i })),
+      };
+      setDraftOrder(loaded);
+      saveToStorage(STORAGE_KEYS.draft, loaded);
+    } else {
+      const fresh = createBlankOrder({ clientId: newClientId });
+      setDraftOrder(fresh);
+      saveToStorage(STORAGE_KEYS.draft, fresh);
+    }
+  };
+
   // Automatic multi-service add (sums quantity if already added or appends new line)
   const handleAddServiceToDraft = (srv: ServiceItem) => {
     setDraftOrder((prev) => {
       const existingIdx = prev.items.findIndex((it) => it.serviceId === srv.id);
-      if (existingIdx >= 0) {
-        const updated = [...prev.items];
-        updated[existingIdx] = {
-          ...updated[existingIdx],
-          qty: updated[existingIdx].qty + 1,
-        };
-        return { ...prev, items: updated };
-      }
-      return {
+      const nextItems =
+        existingIdx >= 0
+          ? prev.items.map((it, idx) =>
+              idx === existingIdx ? { ...it, qty: it.qty + 1 } : it
+            )
+          : [
+              ...prev.items,
+              {
+                id: generateId('li'),
+                serviceId: srv.id,
+                name: srv.name,
+                category: srv.category,
+                qty: 1,
+                partPrice: srv.partPrice,
+                laborPrice: srv.laborPrice,
+              },
+            ];
+      const next: WorkOrder = {
         ...prev,
-        items: [
-          ...prev.items,
-          {
-            id: generateId('li'),
-            serviceId: srv.id,
-            name: srv.name,
-            category: srv.category,
-            qty: 1,
-            partPrice: srv.partPrice,
-            laborPrice: srv.laborPrice,
-          },
-        ],
+        items: nextItems,
+        updatedAt: new Date().toISOString(),
       };
+      saveToStorage(STORAGE_KEYS.draft, next);
+      syncOrderToWorkOrders(next);
+      return next;
+    });
+  };
+
+  const handleAddScreenToDraft = (screen: ScreenCatalogItem) => {
+    const brandLabel = SCREEN_BRAND_LABELS[screen.brand];
+    const lineName = `Troca de Tela — ${brandLabel} ${screen.phoneModel} (${screen.screenType})`;
+    const today = getTodayYMD();
+
+    setDraftOrder((prev) => {
+      const existingIdx = prev.items.findIndex(
+        (it) => it.serviceId === screen.id || it.name === lineName
+      );
+      const nextItems =
+        existingIdx >= 0
+          ? prev.items.map((it, idx) =>
+              idx === existingIdx ? { ...it, qty: it.qty + 1 } : it
+            )
+          : [
+              ...prev.items,
+              {
+                id: generateId('li'),
+                serviceId: screen.id,
+                name: lineName,
+                category: 'telas' as ServiceCategoryId,
+                qty: 1,
+                partPrice: screen.price,
+                laborPrice: 0,
+              },
+            ];
+      const next: WorkOrder = {
+        ...prev,
+        deviceBrandModel:
+          prev.deviceBrandModel.trim() || `${brandLabel} ${screen.phoneModel}`,
+        reportedIssue:
+          prev.reportedIssue.trim() || `Troca de tela (${screen.screenType})`,
+        warrantyDays: 90,
+        warrantyStartDate: prev.warrantyStartDate || today,
+        warrantyEndDate:
+          prev.warrantyStartDate && prev.warrantyEndDate
+            ? prev.warrantyEndDate
+            : addDaysYMD(prev.warrantyStartDate || today, 90),
+        items: nextItems,
+        updatedAt: new Date().toISOString(),
+      };
+      saveToStorage(STORAGE_KEYS.draft, next);
+      syncOrderToWorkOrders(next);
+      return next;
+    });
+  };
+
+  const handleStartBudgetWithScreen = (screen: ScreenCatalogItem) => {
+    const brandLabel = SCREEN_BRAND_LABELS[screen.brand];
+    const lineName = `Troca de Tela — ${brandLabel} ${screen.phoneModel} (${screen.screenType})`;
+    const today = getTodayYMD();
+    const fresh = createBlankOrder({
+      deviceBrandModel: `${brandLabel} ${screen.phoneModel}`,
+      reportedIssue: `Troca de tela (${screen.screenType})`,
+      warrantyDays: 90,
+      warrantyStartDate: today,
+      warrantyEndDate: addDaysYMD(today, 90),
+      items: [
+        {
+          id: generateId('li'),
+          serviceId: screen.id,
+          name: lineName,
+          category: 'telas',
+          qty: 1,
+          partPrice: screen.price,
+          laborPrice: 0,
+        },
+      ],
+    });
+    setDraftOrder(fresh);
+    saveToStorage(STORAGE_KEYS.draft, fresh);
+    setActiveTab('orcamento');
+  };
+
+  const handleSaveScreen = (screen: ScreenCatalogItem) => {
+    setScreenCatalog((prev) => {
+      const exists = prev.some((s) => s.id === screen.id);
+      const next = exists
+        ? prev.map((s) => (s.id === screen.id ? screen : s))
+        : [screen, ...prev];
+      saveToStorage(STORAGE_KEYS.screenCatalog, next);
+      return next;
+    });
+  };
+
+  const handleDeleteScreen = (id: string) => {
+    setScreenCatalog((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveToStorage(STORAGE_KEYS.screenCatalog, next);
+      return next;
     });
   };
 
   const handleRemoveLineFromDraft = (lineId: string) => {
-    setDraftOrder((prev) => ({
-      ...prev,
-      items: prev.items.filter((it) => it.id !== lineId),
-    }));
+    setDraftOrder((prev) => {
+      const next: WorkOrder = {
+        ...prev,
+        items: prev.items.filter((it) => it.id !== lineId),
+        updatedAt: new Date().toISOString(),
+      };
+      saveToStorage(STORAGE_KEYS.draft, next);
+      syncOrderToWorkOrders(next);
+      return next;
+    });
   };
 
   const handleStartBudgetWithService = (srv?: ServiceItem) => {
@@ -308,6 +487,27 @@ export default function App() {
       const next = prev.map((o) =>
         o.id === orderId
           ? { ...o, technicianNotes, updatedAt: new Date().toISOString() }
+          : o
+      );
+      saveToStorage(STORAGE_KEYS.orders, next);
+      return next;
+    });
+  };
+
+  const handleUpdateOrderWarranty = (
+    orderId: string,
+    warrantyStartDate: string,
+    warrantyEndDate: string
+  ) => {
+    setWorkOrders((prev) => {
+      const next = prev.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              warrantyStartDate,
+              warrantyEndDate,
+              updatedAt: new Date().toISOString(),
+            }
           : o
       );
       saveToStorage(STORAGE_KEYS.orders, next);
@@ -377,7 +577,16 @@ export default function App() {
     setActiveTab('orcamento');
   };
 
-  const handleSaveClient = (client: Client) => {
+  const handleSaveClient = (
+    client: Client,
+    options?: {
+      initialServiceId?: string;
+      customServiceText?: string;
+      initialDevice?: string;
+      isNew?: boolean;
+      openBudgetAfter?: boolean;
+    }
+  ) => {
     setClients((prev) => {
       const exists = prev.some((c) => c.id === client.id);
       const next = exists
@@ -386,6 +595,70 @@ export default function App() {
       saveToStorage(STORAGE_KEYS.clients, next);
       return next;
     });
+
+    const chosenSrv = options?.initialServiceId
+      ? services.find((s) => s.id === options.initialServiceId)
+      : undefined;
+    const freeText = (options?.customServiceText ?? '').trim();
+    const deviceText = (options?.initialDevice ?? '').trim();
+
+    if (chosenSrv || (options?.isNew && (freeText || deviceText))) {
+      const initialItems = chosenSrv
+        ? [
+            {
+              id: generateId('li'),
+              serviceId: chosenSrv.id,
+              name: chosenSrv.name,
+              category: chosenSrv.category,
+              qty: 1,
+              partPrice: chosenSrv.partPrice,
+              laborPrice: chosenSrv.laborPrice,
+            },
+          ]
+        : freeText
+          ? [
+              {
+                id: generateId('li'),
+                name: freeText,
+                category: 'celulares' as ServiceCategoryId,
+                qty: 1,
+                partPrice: 0,
+                laborPrice: 0,
+              },
+            ]
+          : [];
+
+      const createdOrder = createBlankOrder({
+        clientId: client.id,
+        deviceBrandModel: deviceText,
+        reportedIssue: freeText,
+        items: initialItems,
+        warrantyDays: chosenSrv ? chosenSrv.warrantyDays : store.defaultWarrantyDays,
+      });
+
+      setWorkOrders((prev) => {
+        const next = [createdOrder, ...prev];
+        saveToStorage(STORAGE_KEYS.orders, next);
+        return next;
+      });
+
+      if (options?.openBudgetAfter) {
+        setDraftOrder(createdOrder);
+        saveToStorage(STORAGE_KEYS.draft, createdOrder);
+      }
+      return;
+    }
+
+    if (options?.openBudgetAfter) {
+      if (!draftOrder.clientId && orderHasContent(draftOrder)) {
+        handleChangeDraft({ ...draftOrder, clientId: client.id });
+      } else {
+        syncOrderToWorkOrders(draftOrder);
+        const fresh = createBlankOrder({ clientId: client.id });
+        setDraftOrder(fresh);
+        saveToStorage(STORAGE_KEYS.draft, fresh);
+      }
+    }
   };
 
   const handleDeleteClient = (id: string) => {
@@ -394,6 +667,18 @@ export default function App() {
       saveToStorage(STORAGE_KEYS.clients, next);
       return next;
     });
+  };
+
+  const handleClearAllClients = () => {
+    setClients([]);
+    setWorkOrders([]);
+    setAppointments([]);
+    const blank = createBlankOrder({ clientId: '' });
+    setDraftOrder(blank);
+    saveToStorage(STORAGE_KEYS.clients, []);
+    saveToStorage(STORAGE_KEYS.orders, []);
+    saveToStorage(STORAGE_KEYS.appointments, []);
+    saveToStorage(STORAGE_KEYS.draft, blank);
   };
 
   const handleSaveService = (srv: ServiceItem) => {
@@ -417,10 +702,11 @@ export default function App() {
 
   const handleExportBackup = () => {
     const payload = {
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       store,
       services,
+      screenCatalog,
       clients,
       workOrders,
       appointments,
@@ -445,6 +731,7 @@ export default function App() {
         const parsed = JSON.parse(String(reader.result || '{}'));
         if (parsed.store) setStore(parsed.store);
         if (Array.isArray(parsed.services)) setServices(parsed.services);
+        if (Array.isArray(parsed.screenCatalog)) setScreenCatalog(parsed.screenCatalog);
         if (Array.isArray(parsed.clients)) setClients(parsed.clients);
         if (Array.isArray(parsed.workOrders)) setWorkOrders(parsed.workOrders);
         if (Array.isArray(parsed.appointments)) setAppointments(parsed.appointments);
@@ -559,14 +846,22 @@ export default function App() {
             <HomeDashboard
               store={store}
               services={services}
+              screenCatalog={screenCatalog}
               clients={clients}
               workOrders={workOrders}
               draftOrder={draftOrder}
               onAddServiceToDraft={handleAddServiceToDraft}
+              onAddScreenToDraft={handleAddScreenToDraft}
+              onSaveScreen={handleSaveScreen}
+              onDeleteScreen={handleDeleteScreen}
               onRemoveLineFromDraft={handleRemoveLineFromDraft}
               onStartNewBudget={() => setDraftOrder(createBlankOrder())}
               onOpenOrderInBudget={handleOpenOrderInBudget}
               onNavigateTab={(t) => setActiveTab(t)}
+              onNavigateToClients={() => {
+                setCatalogInitialSubTab('clientes');
+                setActiveTab('cadastros');
+              }}
             />
           )}
 
@@ -577,6 +872,7 @@ export default function App() {
               store={store}
               onUpdateStatus={handleUpdateOrderStatus}
               onUpdateNotes={handleUpdateOrderNotes}
+              onUpdateWarranty={handleUpdateOrderWarranty}
               onOpenInBudget={handleOpenOrderInBudget}
               onCreateNewOrder={() => handleStartBudgetWithService()}
               onDeleteOrder={handleDeleteOrder}
@@ -601,11 +897,26 @@ export default function App() {
               draftOrder={draftOrder}
               isExistingOrder={isExistingDraft}
               clients={clients}
+              workOrders={workOrders}
               services={services}
+              screenCatalog={screenCatalog}
               store={store}
-              onChangeDraft={setDraftOrder}
+              onChangeDraft={handleChangeDraft}
+              onSwitchClient={handleSwitchDraftClient}
+              onSelectClientOrder={handleOpenOrderInBudget}
+              onNewOrderForClient={(clientId) => {
+                syncOrderToWorkOrders(draftOrder);
+                const fresh = createBlankOrder({ clientId });
+                setDraftOrder(fresh);
+                saveToStorage(STORAGE_KEYS.draft, fresh);
+              }}
               onSaveAsWorkOrder={handleSaveAsWorkOrder}
-              onQuickCreateClient={handleSaveClient}
+              onAddScreenToDraft={handleAddScreenToDraft}
+              onSaveScreen={handleSaveScreen}
+              onDeleteScreen={handleDeleteScreen}
+              onQuickCreateClient={(client, opts) =>
+                handleSaveClient(client, { ...opts, isNew: true, openBudgetAfter: true })
+              }
               onOpenClientsTab={() => {
                 setCatalogInitialSubTab('clientes');
                 setActiveTab('cadastros');
@@ -616,20 +927,42 @@ export default function App() {
           {activeTab === 'cadastros' && (
             <CatalogAndClientsView
               clients={clients}
+              workOrders={workOrders}
               services={services}
+              screenCatalog={screenCatalog}
               store={store}
               initialSubTab={catalogInitialSubTab}
               onClearInitialSubTab={() => setCatalogInitialSubTab(null)}
               onSaveClient={handleSaveClient}
               onDeleteClient={handleDeleteClient}
+              onClearAllClients={handleClearAllClients}
               onSaveService={handleSaveService}
               onDeleteService={handleDeleteService}
+              onSaveScreen={handleSaveScreen}
+              onDeleteScreen={handleDeleteScreen}
               onUpdateStore={setStore}
+              onOpenOrderInBudget={handleOpenOrderInBudget}
               onStartBudgetForClient={(clientId) => {
-                setDraftOrder(createBlankOrder({ clientId }));
+                const clientOrders = workOrders
+                  .filter((o) => o.clientId === clientId)
+                  .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+                if (clientOrders[0]) {
+                  handleOpenOrderInBudget(clientOrders[0].id);
+                } else {
+                  const fresh = createBlankOrder({ clientId });
+                  setDraftOrder(fresh);
+                  saveToStorage(STORAGE_KEYS.draft, fresh);
+                  setActiveTab('orcamento');
+                }
+              }}
+              onStartNewBudgetForClient={(clientId) => {
+                const fresh = createBlankOrder({ clientId });
+                setDraftOrder(fresh);
+                saveToStorage(STORAGE_KEYS.draft, fresh);
                 setActiveTab('orcamento');
               }}
               onStartBudgetForService={(srv) => handleStartBudgetWithService(srv)}
+              onStartBudgetForScreen={handleStartBudgetWithScreen}
               onExportBackup={handleExportBackup}
               onImportBackup={handleImportBackup}
               backupMessage={backupMessage}

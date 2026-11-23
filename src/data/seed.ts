@@ -1,5 +1,12 @@
-import { Appointment, Client, ServiceItem, StoreProfile, WorkOrder } from '../types';
-import { addDaysYMD, getTodayYMD } from '../utils/format';
+import {
+  Appointment,
+  Client,
+  ScreenBrandId,
+  ScreenCatalogItem,
+  ServiceItem,
+  StoreProfile,
+  WorkOrder,
+} from '../types';
 
 export const DEFAULT_STORE_PROFILE: StoreProfile = {
   name: 'V.A Assistência',
@@ -190,177 +197,136 @@ export const INITIAL_SERVICES: ServiceItem[] = [
 
 export const INITIAL_CLIENTS: Client[] = [];
 
-const today = getTodayYMD();
-const tomorrow = addDaysYMD(today, 1);
+export const INITIAL_WORK_ORDERS: WorkOrder[] = [];
 
-export const INITIAL_WORK_ORDERS: WorkOrder[] = [
-  {
-    id: 'os_1',
-    code: 'OS-1024',
-    clientId: 'cli_1',
-    deviceBrandModel: 'iPhone 13 (128GB Azul)',
-    deviceSerial: '358912094812031',
-    reportedIssue: 'Tela trincada após queda, touch falhando na parte inferior.',
-    technicianNotes: 'Face ID testado e funcionando normalmente. Necessária troca do módulo frontal + película 3D.',
-    checklist: {
-      turnsOn: true,
-      screenIntact: false,
-      chargingPortOk: true,
-      passwordNote: 'Solicitar na retirada',
-    },
-    status: 'aprovado',
-    items: [
-      {
-        id: 'li_1',
-        serviceId: 'srv_tela_iphone',
-        name: 'Troca de Tela / Display (iPhone 13)',
-        category: 'telas',
-        qty: 1,
-        partPrice: 360,
-        laborPrice: 160,
-      },
-      {
-        id: 'li_2',
-        serviceId: 'srv_pelicula_3d',
-        name: 'Película 3D de Vidro Temperado',
-        category: 'acessorios',
-        qty: 1,
-        partPrice: 30,
-        laborPrice: 0,
-      },
-    ],
-    cashDiscountPercent: 5,
-    cardMode: 'com_taxa',
-    selectedInstallments: 3,
-    warrantyDays: 90,
-    validityDays: 7,
-    deliveryForecast: today,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'os_2',
-    code: 'OS-1025',
-    clientId: 'cli_2',
-    deviceBrandModel: 'Notebook Dell Inspiron 15 3520',
-    deviceSerial: 'CN-08H91K-70163',
-    reportedIssue: 'Teclas falhando e lentidão ao iniciar o Windows 11.',
-    technicianNotes: 'Teclado com oxidação parcial; sistema com inicialização em 2min40s.',
-    checklist: {
-      turnsOn: true,
-      screenIntact: true,
-      chargingPortOk: true,
-      passwordNote: 'Sem senha',
-    },
-    status: 'orcamento',
-    items: [
-      {
-        id: 'li_3',
-        serviceId: 'srv_teclado_notebook',
-        name: 'Troca de Teclado de Notebook (ABNT2)',
-        category: 'notebooks',
-        qty: 1,
-        partPrice: 170,
-        laborPrice: 130,
-      },
-      {
-        id: 'li_4',
-        serviceId: 'srv_diag_windows',
-        name: 'Diagnóstico e Otimização do Windows 11',
-        category: 'notebooks',
-        qty: 1,
-        partPrice: 0,
-        laborPrice: 120,
-      },
-    ],
-    cashDiscountPercent: 5,
-    cardMode: 'com_taxa',
-    selectedInstallments: 6,
-    warrantyDays: 90,
-    validityDays: 7,
-    deliveryForecast: tomorrow,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'os_3',
-    code: 'OS-1026',
-    clientId: 'cli_3',
-    deviceBrandModel: 'Samsung Galaxy A54 5G',
-    deviceSerial: '352910482910482',
-    reportedIssue: 'Não carrega, cabo fica frouxo no conector.',
-    technicianNotes: 'Conector USB-C desgastado. Pronto para entrega após testes.',
-    checklist: {
-      turnsOn: true,
-      screenIntact: true,
-      chargingPortOk: false,
-      passwordNote: 'Padrão L',
-    },
-    status: 'pronto',
-    items: [
-      {
-        id: 'li_5',
-        serviceId: 'srv_conector_carga',
-        name: 'Troca de Conector de Carga USB-C',
-        category: 'celulares',
-        qty: 1,
-        partPrice: 45,
-        laborPrice: 95,
-      },
-      {
-        id: 'li_6',
-        serviceId: 'srv_cabo_usb',
-        name: 'Cabo USB Reforçado USB-C',
-        category: 'acessorios',
-        qty: 1,
-        partPrice: 35,
-        laborPrice: 0,
-      },
-    ],
-    cashDiscountPercent: 5,
-    cardMode: 'sem_juros',
-    selectedInstallments: 2,
-    warrantyDays: 90,
-    validityDays: 7,
-    deliveryForecast: today,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
+export const INITIAL_APPOINTMENTS: Appointment[] = [];
+
+export const SCREEN_BRANDS: {
+  id: ScreenBrandId;
+  label: string;
+  tagline: string;
+}[] = [
+  { id: 'iphone', label: 'iPhone', tagline: 'Apple · iOS / Displays OLED & Incell' },
+  { id: 'samsung', label: 'Samsung', tagline: 'Linha Galaxy A, M, S e J' },
+  { id: 'motorola', label: 'Motorola', tagline: 'Linha Moto G, E e Edge' },
+  { id: 'xiaomi', label: 'Xiaomi', tagline: 'Redmi, Redmi Note, Poco e Mi' },
 ];
 
-export const INITIAL_APPOINTMENTS: Appointment[] = [
+export const SCREEN_WARRANTY_COVERAGE: string[] = [
+  'Defeitos de fabricação da tela instalada.',
+  'Falhas de funcionamento relacionadas à peça instalada.',
+];
+
+export const SCREEN_WARRANTY_EXCLUSIONS: string[] = [
+  'Tela quebrada ou trincada após a entrega.',
+  'Danos causados por quedas ou impactos.',
+  'Contato com água ou umidade.',
+  'Danos por mau uso ou pressão sobre a tela.',
+  'Defeitos em outros componentes do aparelho.',
+];
+
+export const SCREEN_WARRANTY_LEGAL_NOTE =
+  'Garantia legal de 90 dias aplicada conforme a legislação vigente (Código de Defesa do Consumidor — Lei nº 8.078/1990, Art. 26, II).';
+
+export const INITIAL_SCREEN_CATALOG: ScreenCatalogItem[] = [
+  // iPhone
   {
-    id: 'apt_1',
-    clientId: 'cli_1',
-    deviceBrandModel: 'iPhone 13 (128GB)',
-    category: 'telas',
-    serviceSummary: 'Retirada após troca de tela e aplicação de película 3D',
-    date: today,
-    time: '14:30',
-    status: 'confirmado',
-    notes: 'Avisar 30min antes pelo WhatsApp.',
-    linkedOrderId: 'os_1',
+    id: 'scr_iph_11_incell',
+    brand: 'iphone',
+    phoneModel: 'iPhone 11',
+    screenType: 'LCD Incell Premium',
+    price: 290,
+    warrantyDays: 90,
   },
   {
-    id: 'apt_2',
-    clientId: 'cli_2',
-    deviceBrandModel: 'Lenovo IdeaPad 3',
-    category: 'notebooks',
-    serviceSummary: 'Diagnóstico de problemas no Windows e limpeza interna',
-    date: today,
-    time: '16:00',
-    status: 'agendado',
-    notes: 'Cliente vai trazer carregador original junto.',
+    id: 'scr_iph_12_oled',
+    brand: 'iphone',
+    phoneModel: 'iPhone 12 / 12 Pro',
+    screenType: 'OLED Soft Premium',
+    price: 450,
+    warrantyDays: 90,
   },
   {
-    id: 'apt_3',
-    clientId: 'cli_3',
-    deviceBrandModel: 'Motorola Moto G84',
-    category: 'celulares',
-    serviceSummary: 'Avaliação de conector e cabo flex de áudio',
-    date: tomorrow,
-    time: '10:00',
-    status: 'agendado',
-    notes: '',
+    id: 'scr_iph_13_oled',
+    brand: 'iphone',
+    phoneModel: 'iPhone 13',
+    screenType: 'OLED Original China / Soft OLED',
+    price: 520,
+    warrantyDays: 90,
+  },
+  // Samsung
+  {
+    id: 'scr_sam_a14_orig',
+    brand: 'samsung',
+    phoneModel: 'Galaxy A14 / A15',
+    screenType: 'Display Frontal Original Nacional',
+    price: 260,
+    warrantyDays: 90,
+  },
+  {
+    id: 'scr_sam_a34_amoled',
+    brand: 'samsung',
+    phoneModel: 'Galaxy A34 / A54',
+    screenType: 'Super AMOLED Original',
+    price: 430,
+    warrantyDays: 90,
+  },
+  {
+    id: 'scr_sam_a52_amoled',
+    brand: 'samsung',
+    phoneModel: 'Galaxy A52 / A53',
+    screenType: 'AMOLED Incell Premium',
+    price: 340,
+    warrantyDays: 90,
+  },
+  // Motorola
+  {
+    id: 'scr_mot_g24_orig',
+    brand: 'motorola',
+    phoneModel: 'Moto G24 / G34',
+    screenType: 'Frontal LCD IPS Original',
+    price: 240,
+    warrantyDays: 90,
+  },
+  {
+    id: 'scr_mot_g54_orig',
+    brand: 'motorola',
+    phoneModel: 'Moto G54 / G84',
+    screenType: 'Frontal Full HD+ / pOLED',
+    price: 330,
+    warrantyDays: 90,
+  },
+  {
+    id: 'scr_mot_edge30_poled',
+    brand: 'motorola',
+    phoneModel: 'Moto Edge 30 / Edge 40',
+    screenType: 'pOLED Original',
+    price: 540,
+    warrantyDays: 90,
+  },
+  // Xiaomi
+  {
+    id: 'scr_xia_rn12_amoled',
+    brand: 'xiaomi',
+    phoneModel: 'Redmi Note 12',
+    screenType: 'AMOLED Original',
+    price: 350,
+    warrantyDays: 90,
+  },
+  {
+    id: 'scr_xia_rn13_amoled',
+    brand: 'xiaomi',
+    phoneModel: 'Redmi Note 13',
+    screenType: 'AMOLED Original / Premium',
+    price: 390,
+    warrantyDays: 90,
+  },
+  {
+    id: 'scr_xia_poco_x5_amoled',
+    brand: 'xiaomi',
+    phoneModel: 'Poco X5 / X6 Pro',
+    screenType: 'AMOLED 120Hz Original',
+    price: 460,
+    warrantyDays: 90,
   },
 ];

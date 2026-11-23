@@ -6,10 +6,14 @@ import {
   Eye,
   FileText,
   MessageCircle,
+  MonitorSmartphone,
   Plus,
   Printer,
   Save,
+  ShieldCheck,
+  Sparkles,
   Trash2,
+  Truck,
   UserPlus,
   Wallet,
   X,
@@ -18,6 +22,8 @@ import {
   BudgetLineItem,
   CardMode,
   Client,
+  PickupDeliveryOption,
+  ScreenCatalogItem,
   ServiceCategoryId,
   ServiceItem,
   StoreProfile,
@@ -25,22 +31,43 @@ import {
 } from '../types';
 import {
   CATEGORY_SHORT_LABELS,
+  FREE_PROTECTOR_DESCRIPTION,
+  addDaysYMD,
   calculateBudgetTotals,
   formatBRL,
+  formatDateBR,
   generateId,
+  getPickupFeeAmount,
+  getTodayYMD,
 } from '../utils/format';
 import { generateBudgetPDF } from '../utils/pdfGenerator';
 import { A4PreviewSheet } from './A4PreviewSheet';
+import { ScreenCatalogModal } from './ScreenCatalogModal';
 
 interface BudgetBuilderViewProps {
   draftOrder: WorkOrder;
   isExistingOrder: boolean;
   clients: Client[];
+  workOrders: WorkOrder[];
   services: ServiceItem[];
+  screenCatalog: ScreenCatalogItem[];
   store: StoreProfile;
   onChangeDraft: (order: WorkOrder) => void;
+  onSwitchClient: (clientId: string) => void;
+  onSelectClientOrder: (orderId: string) => void;
+  onNewOrderForClient: (clientId: string) => void;
   onSaveAsWorkOrder: (order: WorkOrder) => void;
-  onQuickCreateClient: (client: Client) => void;
+  onAddScreenToDraft: (screen: ScreenCatalogItem) => void;
+  onSaveScreen: (screen: ScreenCatalogItem) => void;
+  onDeleteScreen: (id: string) => void;
+  onQuickCreateClient: (
+    client: Client,
+    options?: {
+      initialServiceId?: string;
+      customServiceText?: string;
+      initialDevice?: string;
+    }
+  ) => void;
   onOpenClientsTab?: () => void;
 }
 
@@ -48,15 +75,24 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
   draftOrder,
   isExistingOrder,
   clients,
+  workOrders,
   services,
+  screenCatalog,
   store,
   onChangeDraft,
+  onSwitchClient,
+  onSelectClientOrder,
+  onNewOrderForClient,
   onSaveAsWorkOrder,
+  onAddScreenToDraft,
+  onSaveScreen,
+  onDeleteScreen,
   onQuickCreateClient,
   onOpenClientsTab,
 }) => {
   const [mobileMode, setMobileMode] = useState<'edit' | 'preview'>('edit');
   const [catalogCat, setCatalogCat] = useState<'todos' | ServiceCategoryId>('todos');
+  const [screensPickerOpen, setScreensPickerOpen] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [clientSavedFeedback, setClientSavedFeedback] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -66,6 +102,9 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
   const [qcPhone, setQcPhone] = useState('');
   const [qcCpf, setQcCpf] = useState('');
   const [qcAddress, setQcAddress] = useState('');
+  const [qcDevice, setQcDevice] = useState('');
+  const [qcServiceId, setQcServiceId] = useState('');
+  const [qcServiceNotes, setQcServiceNotes] = useState('');
 
   const matchedClient = useMemo(
     () => clients.find((c) => c.id === draftOrder.clientId),
@@ -74,6 +113,18 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
   const selectedClient = matchedClient ?? clients[0];
   const effectiveClientId = selectedClient?.id ?? '';
 
+  const clientOrders = useMemo(
+    () =>
+      effectiveClientId
+        ? workOrders
+            .filter((o) => o.clientId === effectiveClientId)
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        : [],
+    [workOrders, effectiveClientId]
+  );
+
+  const pickupFee = getPickupFeeAmount(draftOrder.pickupDeliveryFee);
+
   const totals = useMemo(
     () =>
       calculateBudgetTotals(
@@ -81,16 +132,24 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
         draftOrder.cashDiscountPercent,
         store.cardRates,
         draftOrder.selectedInstallments,
-        draftOrder.cardMode
+        draftOrder.cardMode,
+        pickupFee
       ),
     [
       draftOrder.items,
       draftOrder.cashDiscountPercent,
+      pickupFee,
       store.cardRates,
       draftOrder.selectedInstallments,
       draftOrder.cardMode,
     ]
   );
+
+  const todayYmd = getTodayYMD();
+  const warrantyDays = draftOrder.warrantyDays || store.defaultWarrantyDays || 90;
+  const warrantyStart = draftOrder.warrantyStartDate || todayYmd;
+  const warrantyEnd =
+    draftOrder.warrantyEndDate || addDaysYMD(warrantyStart, warrantyDays);
 
   const filteredCatalog = useMemo(() => {
     if (catalogCat === 'todos') return services;
@@ -205,15 +264,20 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
       '*Itens / Serviços:*',
       ...draftOrder.items.map(
         (it) =>
-          `• ${it.qty}x ${it.name}: ${formatBRL((it.partPrice + it.laborPrice) * it.qty)} (Peça ${formatBRL(it.partPrice * it.qty)} + M.O. ${formatBRL(it.laborPrice * it.qty)})`
+          `• ${it.qty}x ${it.name}: ${formatBRL((it.partPrice + it.laborPrice) * it.qty)}`
       ),
+      ...(draftOrder.freeScreenProtector
+        ? [`• ${FREE_PROTECTOR_DESCRIPTION} (GRÁTIS - R$ 0,00)`]
+        : []),
+      `• Deslocamento (Busca do aparelho): ${
+        pickupFee > 0 ? formatBRL(pickupFee) : 'GRÁTIS (R$ 0,00)'
+      }`,
       '',
-      `Total Peças: ${formatBRL(totals.partsSubtotal)}`,
-      `Total Mão de Obra: ${formatBRL(totals.laborSubtotal)}`,
       `*À Vista (PIX/Dinheiro): ${formatBRL(totals.cashTotal)}*`,
       `*Cartão (${totals.selectedInstallment.installments}x): ${totals.selectedInstallment.installments}x de ${formatBRL(totals.selectedInstallment.perInstallment)} (Total ${formatBRL(totals.selectedInstallment.total)})*`,
       '',
-      `Garantia: ${draftOrder.warrantyDays} dias.`,
+      `*Garantia de ${warrantyDays} dias* (Instalação: ${formatDateBR(warrantyStart)} · Término: ${formatDateBR(warrantyEnd)})`,
+      'Cobre defeitos de fabricação e falhas da peça instalada. Não cobre tela quebrada/trincada após entrega, quedas, umidade, mau uso ou outros componentes (CDC Lei 8.078/90).',
     ];
     const phoneDigits = (selectedClient?.phone || '').replace(/\D/g, '');
     const waPrefix = phoneDigits.length >= 10 ? `https://wa.me/55${phoneDigits}` : 'https://wa.me/';
@@ -224,6 +288,12 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
   const handleQuickClientSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!qcName.trim()) return;
+    const chosenSrv = qcServiceId
+      ? services.find((s) => s.id === qcServiceId)
+      : undefined;
+    const summaryText =
+      qcServiceNotes.trim() || (chosenSrv ? chosenSrv.name : '');
+
     const newClient: Client = {
       id: generateId('cli'),
       name: qcName.trim(),
@@ -231,17 +301,27 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
       email: '',
       cpfCnpj: qcCpf.trim(),
       address: qcAddress.trim(),
-      notes: '',
+      notes: summaryText,
       createdAt: new Date().toISOString(),
     };
-    onQuickCreateClient(newClient);
-    onChangeDraft({ ...draftOrder, clientId: newClient.id });
+    onQuickCreateClient(newClient, {
+      initialServiceId: qcServiceId || undefined,
+      customServiceText: qcServiceNotes.trim() || undefined,
+      initialDevice: qcDevice.trim() || undefined,
+    });
     setQcName('');
     setQcPhone('');
     setQcCpf('');
     setQcAddress('');
+    setQcDevice('');
+    setQcServiceId('');
+    setQcServiceNotes('');
     setQuickClientOpen(false);
-    setClientSavedFeedback(`Cliente "${newClient.name}" salvo no cadastro e selecionado!`);
+    setClientSavedFeedback(
+      summaryText
+        ? `Cliente "${newClient.name}" salvo com "${summaryText}"!`
+        : `Cliente "${newClient.name}" salvo no cadastro e selecionado!`
+    );
     setTimeout(() => setClientSavedFeedback(null), 4000);
   };
 
@@ -385,28 +465,78 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Cliente
-                </label>
-                <select
-                  value={effectiveClientId}
-                  onChange={(e) =>
-                    onChangeDraft({ ...draftOrder, clientId: e.target.value })
-                  }
-                  className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
-                >
-                  {clients.length === 0 ? (
-                    <option value="">Nenhum cliente cadastrado</option>
-                  ) : (
-                    clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.phone ? ` — ${c.phone}` : ''}
-                      </option>
-                    ))
-                  )}
-                </select>
+              <div className="sm:col-span-2 space-y-2.5">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Cliente
+                  </label>
+                  <select
+                    value={effectiveClientId}
+                    onChange={(e) => onSwitchClient(e.target.value)}
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  >
+                    {clients.length === 0 ? (
+                      <option value="">Nenhum cliente cadastrado</option>
+                    ) : (
+                      clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                          {c.phone ? ` — ${c.phone}` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {selectedClient && (
+                  <div className="rounded-xl bg-[var(--surface-2)] border border-[var(--border)] p-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                        Orçamentos / Serviços de {selectedClient.name} ({clientOrders.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onNewOrderForClient(selectedClient.id)}
+                        className="text-xs font-semibold text-[var(--accent-text)] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Novo Orçamento p/ {selectedClient.name.split(' ')[0]}</span>
+                      </button>
+                    </div>
+                    {clientOrders.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {clientOrders.map((ord) => {
+                          const active = ord.id === draftOrder.id;
+                          const itemLabel =
+                            ord.items.map((it) => it.name).join(', ') ||
+                            ord.deviceBrandModel ||
+                            'Orçamento em aberto';
+                          return (
+                            <button
+                              key={ord.id}
+                              type="button"
+                              onClick={() => onSelectClientOrder(ord.id)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border text-left transition-colors cursor-pointer ${
+                                active
+                                  ? 'bg-[var(--accent)] text-[var(--accent-on)] border-[var(--accent)]'
+                                  : 'bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--accent)]'
+                              }`}
+                            >
+                              <span className="font-num font-bold mr-1.5">{ord.code}</span>
+                              <span className="truncate max-w-[200px] inline-block align-bottom">
+                                {itemLabel}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Adicione serviços abaixo — tudo fica salvo automaticamente para {selectedClient.name}.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -477,12 +607,15 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                     type="number"
                     min="0"
                     value={draftOrder.warrantyDays}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const days = Math.max(0, Number(e.target.value) || 0);
                       onChangeDraft({
                         ...draftOrder,
-                        warrantyDays: Math.max(0, Number(e.target.value) || 0),
-                      })
-                    }
+                        warrantyDays: days,
+                        warrantyStartDate: warrantyStart,
+                        warrantyEndDate: addDaysYMD(warrantyStart, days),
+                      });
+                    }}
                     className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 font-num text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                   />
                 </div>
@@ -504,23 +637,71 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                   />
                 </div>
               </div>
+
+              <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Data de Instalação (Início da Garantia)
+                  </label>
+                  <input
+                    type="date"
+                    value={warrantyStart}
+                    onChange={(e) => {
+                      const nextStart = e.target.value || todayYmd;
+                      onChangeDraft({
+                        ...draftOrder,
+                        warrantyStartDate: nextStart,
+                        warrantyEndDate: addDaysYMD(nextStart, warrantyDays),
+                      });
+                    }}
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Término da Garantia ({warrantyDays} dias)
+                  </label>
+                  <input
+                    type="date"
+                    value={warrantyEnd}
+                    onChange={(e) =>
+                      onChangeDraft({
+                        ...draftOrder,
+                        warrantyStartDate: warrantyStart,
+                        warrantyEndDate: e.target.value,
+                      })
+                    }
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+              </div>
             </div>
           </section>
 
-          {/* 2. Quick Service Picker + Editable Line Items */}
+          {/* 2. Quick Service Picker + Editable Line Items + Cortesia + Deslocamento */}
           <section className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
               <h2 className="font-display text-base font-bold text-[var(--text-primary)]">
                 2. Peças, Serviços e Mão de Obra
               </h2>
-              <button
-                type="button"
-                onClick={addCustomLineItem}
-                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--surface-2)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] text-xs font-semibold inline-flex items-center gap-1.5 border border-[var(--border)] cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Item Avulso</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScreensPickerOpen(true)}
+                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--accent)] text-[var(--accent-on)] hover:bg-[var(--accent-hover)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <MonitorSmartphone className="w-3.5 h-3.5" />
+                  <span>Escolher Tela</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={addCustomLineItem}
+                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[var(--surface-2)] hover:bg-[var(--surface-hover)] text-[var(--text-primary)] text-xs font-semibold inline-flex items-center gap-1.5 border border-[var(--border)] cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Item Avulso</span>
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -670,6 +851,119 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                 })
               )}
             </div>
+            {/* Película Grátis & Deslocamento Controls */}
+            <div className="pt-2 border-t border-[var(--border)] space-y-4">
+              {/* Película Grátis Toggle */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[var(--accent-text)]" />
+                  <span>Cortesia — Película de Proteção</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChangeDraft({
+                      ...draftOrder,
+                      freeScreenProtector: !draftOrder.freeScreenProtector,
+                    })
+                  }
+                  aria-pressed={Boolean(draftOrder.freeScreenProtector)}
+                  className={`w-full min-h-[48px] rounded-xl border p-3.5 text-left flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                    draftOrder.freeScreenProtector
+                      ? 'bg-emerald-500/15 border-emerald-500 text-[var(--text-primary)]'
+                      : 'bg-[var(--surface-2)] border-[var(--border)] hover:border-[var(--accent)] text-[var(--text-secondary)]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                        draftOrder.freeScreenProtector
+                          ? 'bg-emerald-500 border-emerald-500 text-white'
+                          : 'border-[var(--border-strong)] bg-[var(--input-bg)]'
+                      }`}
+                    >
+                      {draftOrder.freeScreenProtector && <Check className="w-3.5 h-3.5" />}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[var(--text-primary)]">
+                        Adicionar película grátis
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {draftOrder.freeScreenProtector
+                          ? FREE_PROTECTOR_DESCRIPTION
+                          : 'Inclui película grátis de cortesia no orçamento sem acréscimo'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-num text-xs text-emerald-400 shrink-0">
+                    R$ 0,00
+                  </span>
+                </button>
+              </div>
+
+              {/* Deslocamento — Busca do Aparelho */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-[var(--accent-text)]" />
+                  <span>Deslocamento — Busca do aparelho</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeDraft({
+                        ...draftOrder,
+                        pickupDeliveryFee: 'gratis' as PickupDeliveryOption,
+                      })
+                    }
+                    className={`min-h-[56px] rounded-xl border p-3 text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                      draftOrder.pickupDeliveryFee !== 'taxa_10'
+                        ? 'bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--text-primary)]'
+                        : 'bg-[var(--surface-2)] border-[var(--border)] hover:border-[var(--accent)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-num text-sm text-[var(--accent-text)]">
+                        GRÁTIS
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Sem cobrança de deslocamento
+                      </p>
+                    </div>
+                    <span className="font-num text-xs text-[var(--text-primary)] shrink-0">
+                      R$ 0,00
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChangeDraft({
+                        ...draftOrder,
+                        pickupDeliveryFee: 'taxa_10' as PickupDeliveryOption,
+                      })
+                    }
+                    className={`min-h-[56px] rounded-xl border p-3 text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                      draftOrder.pickupDeliveryFee === 'taxa_10'
+                        ? 'bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--text-primary)]'
+                        : 'bg-[var(--surface-2)] border-[var(--border)] hover:border-[var(--accent)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-num text-sm text-[var(--accent-text)]">
+                        R$ 10,00
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Busca do aparelho no endereço do cliente
+                      </p>
+                    </div>
+                    <span className="font-num text-xs text-[var(--text-primary)] shrink-0">
+                      + R$ 10,00
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* 3. Payment Calculation: À Vista vs Cartão */}
@@ -678,9 +972,9 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
               3. Cálculo: À Vista e Cartão de Crédito
             </h2>
 
-            <div className="grid grid-cols-3 gap-3 p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-center tabular-nums">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-center tabular-nums">
               <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Peças</p>
+                <p className="text-[11px] text-[var(--text-muted)]">Peças / Telas</p>
                 <p className="font-num text-sm font-bold text-[var(--text-primary)]">
                   {formatBRL(totals.partsSubtotal)}
                 </p>
@@ -692,7 +986,13 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                 </p>
               </div>
               <div>
-                <p className="text-[11px] text-[var(--text-muted)]">Bruto Total</p>
+                <p className="text-[11px] text-[var(--text-muted)]">Deslocamento</p>
+                <p className="font-num text-sm font-bold text-[var(--text-primary)]">
+                  {totals.pickupFee > 0 ? formatBRL(totals.pickupFee) : 'GRÁTIS'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-[var(--text-muted)]">Total Final</p>
                 <p className="font-num text-sm font-bold text-[var(--accent-text)]">
                   {formatBRL(totals.grossSubtotal)}
                 </p>
@@ -870,7 +1170,7 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-5 space-y-3.5">
+            <div className="p-5 space-y-3.5 max-h-[70vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
                   Nome Completo *
@@ -880,42 +1180,88 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
                   required
                   value={qcName}
                   onChange={(e) => setQcName(e.target.value)}
+                  placeholder="Ex: Vanessa, Carlos..."
                   className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  WhatsApp / Telefone
-                </label>
-                <input
-                  type="text"
-                  value={qcPhone}
-                  onChange={(e) => setQcPhone(e.target.value)}
-                  placeholder="(11) 99999-9999"
-                  className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    WhatsApp / Telefone
+                  </label>
+                  <input
+                    type="text"
+                    value={qcPhone}
+                    onChange={(e) => setQcPhone(e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Aparelho / Equipamento
+                  </label>
+                  <input
+                    type="text"
+                    value={qcDevice}
+                    onChange={(e) => setQcDevice(e.target.value)}
+                    placeholder="Ex: iPhone 13, Samsung A54"
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  CPF / CNPJ
+                  Serviço Realizado (Catálogo — Opcional)
                 </label>
-                <input
-                  type="text"
-                  value={qcCpf}
-                  onChange={(e) => setQcCpf(e.target.value)}
+                <select
+                  value={qcServiceId}
+                  onChange={(e) => setQcServiceId(e.target.value)}
                   className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
-                />
+                >
+                  <option value="">Selecionar serviço pronto ou digitar abaixo...</option>
+                  {services.map((srv) => (
+                    <option key={srv.id} value={srv.id}>
+                      {srv.name} ({formatBRL(srv.partPrice + srv.laborPrice)})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                  Endereço
+                  O que foi feito / Observações
                 </label>
                 <input
                   type="text"
-                  value={qcAddress}
-                  onChange={(e) => setQcAddress(e.target.value)}
+                  value={qcServiceNotes}
+                  onChange={(e) => setQcServiceNotes(e.target.value)}
+                  placeholder="Ex: Troca de tela, troca de película 3D..."
                   className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
                 />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    CPF / CNPJ
+                  </label>
+                  <input
+                    type="text"
+                    value={qcCpf}
+                    onChange={(e) => setQcCpf(e.target.value)}
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
+                    Endereço
+                  </label>
+                  <input
+                    type="text"
+                    value={qcAddress}
+                    onChange={(e) => setQcAddress(e.target.value)}
+                    className="w-full min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
               </div>
             </div>
             <div className="px-5 py-4 bg-[var(--surface-2)] border-t border-[var(--border)] flex justify-end gap-3">
@@ -936,6 +1282,19 @@ export const BudgetBuilderView: React.FC<BudgetBuilderViewProps> = ({
           </form>
         </div>
       )}
+
+      {/* 4-Brand TELAS Picker Modal directly inside Budget Builder */}
+      <ScreenCatalogModal
+        open={screensPickerOpen}
+        onClose={() => setScreensPickerOpen(false)}
+        screens={screenCatalog}
+        store={store}
+        draftOrder={draftOrder}
+        onSaveScreen={onSaveScreen}
+        onDeleteScreen={onDeleteScreen}
+        onAddScreenToBudget={onAddScreenToDraft}
+        onOpenBudget={() => setScreensPickerOpen(false)}
+      />
     </div>
   );
 };
